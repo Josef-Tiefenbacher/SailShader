@@ -1,0 +1,342 @@
+<html>
+	<head>
+		<script type="text/javascript" src="sail_shader.js"></script>
+		<meta http-equiv="refresh" content="10000" >
+		<meta charset="utf-8"/>
+
+
+
+<script id="vertex-shader" type="x-shader/x-vertex">
+    // an attribute will receive data from a buffer
+    attribute vec4 a_position;
+   varying vec4 vPos;
+    // all shaders have a main function
+    void main() {
+
+      // gl_Position is a special variable a vertex shader
+      // is responsible for setting
+      vPos = vec4(-a_position.x, a_position.yzw);
+      gl_Position = a_position;
+    }
+</script>
+
+
+<script id="fragment-shader" type="x-shader/x-fragment">
+    precision highp float;
+     varying vec4 vPos;
+
+  uniform vec2 uPos;
+  uniform vec2 uDeb;
+  uniform float uViewAngle;
+  uniform float uSailAngle;
+  uniform float uTime;
+
+  #define PI     3.14159265
+
+float psin(in float a)
+{
+return (sin(a)/2.0) +0.5;
+}
+float pcos(in float a)
+{
+return (cos(a)/2.0) +0.5;
+}
+
+
+float timeRot()
+{
+return uViewAngle;
+}
+
+
+float land(in vec2 uv)
+{
+    uv= uv /3.0;
+    float xy = uv.x+uv.y;
+    float val = psin(xy+3.0*psin(uv.x)+psin(uv.y)+psin(xy/10.0)*10.0);
+    return val;
+}
+
+vec3 raystep(in vec2 uv)
+{
+    float rot = timeRot();
+    vec2 str = vec2(sin(rot), cos(rot));
+    vec2 nrm = vec2(sin(rot+(PI/2.0)), cos(rot+(PI/2.0)));
+
+    vec3 stp = vec3(str+((uv.x - 0.5)*nrm), 0.1-(1.0- uv.y));
+    float len = length(stp);
+    return stp/len;
+}
+
+vec3 ray(in vec3 pos, in vec2 uv, in float dist)
+{
+    vec3 stp = raystep(uv);
+    return pos+(stp * dist);
+}
+
+float asPart(in float val)
+{
+    return val - floor(val);
+}
+
+vec3 getColorForPos(in vec3 rayPos, in vec2 pos2, in float h, in vec3 background)
+{
+    float centerDist = distance(rayPos, vec3(pos2, h));  
+     float viewDist = centerDist / 50.0;
+     if(viewDist > 1.0)
+         viewDist = 1.0;
+     viewDist = viewDist*viewDist;
+
+     float truncated = asPart(uTime / 1000.0 + rayPos.y/4.0 + floor(rayPos.x*2.0)/3.0) / 4.0 +0.25;
+     float truncated2 = asPart(uTime / 2500.0 + rayPos.y/3.0 + floor(rayPos.x*3.0)/3.0) / 4.0 +0.25;
+
+     float tx1 = pow(abs(0.5 -asPart(rayPos.x*5.15+0.74 )), 2.0);
+     float tx2 = pow(abs(0.5 -asPart(rayPos.x*6.25+0.39 )), 2.0);
+
+
+     float slider1 = psin(20.0*rayPos.x);
+     float slider11 = psin(rayPos.y/2.0 + asPart(uTime / 3500.0)*2.0*PI);
+
+     float slider2 = psin(23.0*rayPos.x/1.7+1.3);
+     float slider12 = psin(rayPos.y/3.0 + asPart(uTime / 3500.0)*2.0*PI);
+
+
+     truncated = mix(0.5, truncated, slider1*slider1*slider11*tx1);
+     truncated2 = mix(0.5, truncated2, slider2*slider2*slider12*tx2);
+
+     vec3 color = vec3((h+0.5+truncated-truncated2)/2.0,(h+0.5+truncated-truncated2)/2.0, (h)/4.0+0.2);
+
+
+     color = (1.0-viewDist)*color+viewDist*background;
+
+
+     float fullSailAngle = uSailAngle - uViewAngle - PI/2.0;
+     vec2 sailVec = vec2(cos(fullSailAngle), sin(fullSailAngle))*-0.14 + pos2;
+     float debDist = distance(rayPos, vec3(sailVec, h))+ 0.05;  
+
+     if(centerDist < 0.1 || debDist < 0.1)
+         color = color*pow( min(centerDist*10.0, debDist*10.0),2.0);
+     return color;
+}
+
+vec4 charDist(vec3 rayPos, vec3 pos, float rad)
+{
+	float h = land(pos.xy);
+    float shipDis = length(pos - rayPos) - rad;
+
+    float fullSailAngle = uSailAngle - uViewAngle - PI/2.0;
+    vec2 vecSailAngle = vec2(cos(fullSailAngle), sin(fullSailAngle));
+    float normalAngle = -sign(uSailAngle) * PI/2.0;
+    vec2 normalSailAngle = vec2(cos(fullSailAngle+normalAngle), sin(fullSailAngle+normalAngle));
+
+    vec2 sailVec2In = vecSailAngle*-0.27 + normalSailAngle*1.58 + pos.xy;
+    vec3 sailVec3In = vec3(sailVec2In, h+rad);
+    
+    vec2 sailVec2Out = vecSailAngle*-0.27 + normalSailAngle*0.72 + pos.xy;
+    vec3 sailVec3Out = vec3(sailVec2Out, h+rad);
+
+    float sailDis = max(length(sailVec3Out - rayPos) - (8.0*rad),   (16.0*rad) - length(sailVec3In - rayPos));
+
+    float gap =  0.4 * distance(rayPos.xy, pos.xy);
+    float aboveGroud = gap - (rayPos.z-(h+0.5*gap));
+    sailDis = max(sailDis, aboveGroud);
+
+    float colBase = (rayPos.z-h)*8.0 -0.4 ;
+    colBase = colBase* 0.5 + h*0.4;
+    if(shipDis < sailDis || shipDis< 0.05)
+		return vec4(vec3(0.2 + 0.7 * colBase),  shipDis);
+	else
+		return vec4(vec3(0.4*colBase),  sailDis);
+}
+
+
+vec3 view(in vec2 uv, in vec2 pos2)
+{
+     vec3 background = vec3(uv.y-0.4, uv.y-0.3, uv.y-0.3);
+     vec3 stp = raystep(uv);
+     vec3 rayPos = vec3(pos2-(raystep(vec2(0.5,0.5)).xy*5.0), 3.7);
+
+     float sphereRad = 0.1;
+     vec3 shipPos = vec3(pos2, land(pos2)+sphereRad);
+
+     float nMinSteps = (rayPos.z-max(1.0, shipPos.z+sphereRad*8.0))/stp.z;
+     if(nMinSteps > 0.0)
+        return background;
+     rayPos = rayPos +(stp*-nMinSteps);
+     for(float i = 0.0; i< 1000.0; i++)
+     {
+        vec4 sphereDst = charDist(rayPos, shipPos, sphereRad);
+        if(sphereDst.w < 0.0)
+        {
+        	return sphereDst.xyz;
+        }
+         float h = land(rayPos.xy);
+         if(rayPos.z < h+0.01)
+         {
+            return getColorForPos(rayPos, pos2, h, background);
+         }
+        float stpDist = abs(h-rayPos.z)+0.001;
+        if(sphereDst.w < stpDist)
+        {
+        	stpDist = sphereDst.w+0.001;
+        }	
+        rayPos = rayPos+(stp * stpDist);
+     }
+     return background;
+}
+
+    void main() {
+      // gl_FragColor is a special variable a fragment shader
+      // is responsible for setting
+      vec2 uv = (vPos.xy +vec2(1.0))/2.0;
+       vec3 aaa = view(uv,uPos);
+      gl_FragColor = vec4(aaa,1.0);
+    }
+</script>
+
+
+
+<script type="text/javascript">
+
+function animateScene(time ) {
+  gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+  gl.useProgram(shaderProgram);
+
+  uPos = gl.getUniformLocation(shaderProgram, "uPos");
+  uDeb = gl.getUniformLocation(shaderProgram, "uDeb");
+  uTime = gl.getUniformLocation(shaderProgram, "uTime");
+  iResolution = gl.getUniformLocation(shaderProgram, "iResolution");
+  uViewAngle = gl.getUniformLocation(shaderProgram, "uViewAngle");    
+  uSailAngle = gl.getUniformLocation(shaderProgram, "uSailAngle");    
+
+
+
+
+  gl.uniform2fv(uPos, shaderPos);
+  gl.uniform2fv(uDeb, shaderDeb);
+  gl.uniform1f(uTime, time);
+  gl.uniform2fv(iResolution, [glCanvas.width, glCanvas.height]);
+  gl.uniform1f(uViewAngle, shaderAngle);
+  gl.uniform1f(uSailAngle, shaderSailAngle);
+
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+
+  aVertexPosition = gl.getAttribLocation(shaderProgram, "a_position");
+
+  gl.enableVertexAttribArray(aVertexPosition);
+  gl.vertexAttribPointer(aVertexPosition, 2, gl.FLOAT, false, 0, 0);
+
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+  window.requestAnimationFrame(function(currentTime) {
+    animateScene(currentTime);
+  });
+}
+
+var shaderPos = [0,0];
+var shaderDeb = [0,0];
+var shaderAngle = Math.PI*1.25;
+var shaderSailAngle = Math.PI*1.25;
+
+
+let gl = null;
+let glCanvas = null;
+
+// Vertex information
+let vertexArray;
+let vertexBuffer;
+let vertexNumComponents;
+let vertexCount;
+// Rendering data shared with the
+// scalers.
+// Animation timing
+window.addEventListener("load", startup, false);
+
+function startup() {
+  glCanvas = document.getElementById("glcanvas");
+  gl = glCanvas.getContext("webgl");
+  console.log("max num of attribts: "+gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
+  const shaderSet = [
+    {
+      type: gl.VERTEX_SHADER,
+      id: "vertex-shader"
+    },
+    {
+      type: gl.FRAGMENT_SHADER,
+      id: "fragment-shader"
+    }
+  ];
+  shaderProgram = buildShaderProgram(shaderSet);
+  aspectRatio = glCanvas.width/glCanvas.height;
+  vertexArray = new Float32Array([
+    -1, -1,  // first triangle
+     1, -1,
+    -1,  1,
+    -1,  1,  // second triangle
+     1, -1,
+     1,  1,
+  ]);
+  vertexBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, vertexArray, gl.STATIC_DRAW);
+  vertexNumComponents = 4;
+  vertexCount = vertexArray.length/vertexNumComponents;
+
+  animateScene();
+}
+
+
+function buildShaderProgram(shaderInfo) {
+  let program = gl.createProgram();
+
+  shaderInfo.forEach(function(desc) {
+    let shader = compileShader(desc.id, desc.type);
+
+    if (shader) {
+      gl.attachShader(program, shader);
+    }
+  });
+
+  gl.linkProgram(program)
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.log("Error linking shader program:");
+    console.log(gl.getProgramInfoLog(program));
+  }
+
+  return program;
+}
+
+
+
+
+
+function compileShader(id, type) {
+  let code = document.getElementById(id).firstChild.nodeValue;
+  let shader = gl.createShader(type);
+
+  gl.shaderSource(shader, code);
+  gl.compileShader(shader);
+
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.log(`Error compiling ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader:`);
+    console.log(gl.getShaderInfoLog(shader));
+  }
+  return shader;
+}
+</script>
+
+</HEAD>
+<!-- Learn about this code on MDN: https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Basic_2D_animation_example -->
+	<body>
+<canvas id="glcanvas" width="800" height="600">
+  Oh no! Your browser doesn't support canvas!
+</canvas>
+
+
+
+		<canvas id = 'c' width="800" height="600"></canvas>
+		<div id ='div'> </div>
+	</body>
+</html>
