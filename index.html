@@ -135,21 +135,15 @@ vec4 getGroundColor(in vec3 rayPos, in vec2 pos2, in float h)
     if(shadow < 0.0)
       shadow = 0.0;
 
-
     float fade = (0.1 +(truncated-truncated2) + shadow)*0.85 ;
 
     vec3 baseColor = vec3(0.8, 0.7, 0.5);
     vec3 color = blendColor(baseColor/2.0, baseColor, fade);
 
-
-
     // ship shadow
-    float centerDist = distance(rayPos, vec3(pos2-sundir*0.1, h));  
-    float fullSailAngle = uSailAngle - uViewAngle - PI/2.0;
-    vec2 sailVec = vec2(cos(fullSailAngle), sin(fullSailAngle))*-0.14 + pos2-sundir*0.1;
-    float debDist = distance(rayPos, vec3(sailVec, h))+ 0.05;  
-    if(centerDist < 0.1 || debDist < 0.1)
-      color = blendColor(color/2.0, color, pow( min(centerDist*10.0, debDist*10.0),2.0));
+    float centerDist = distance(rayPos, vec3(pos2-sundir*0.05, h));  
+    if(centerDist < 0.1)
+      color = blendColor(color/2.0, color, pow(centerDist*10.0,2.0));
 
     float viewDist = distance(rayPos, vec3(pos2, h)) / 60.0;
     if(viewDist > 1.0)
