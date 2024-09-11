@@ -129,7 +129,7 @@ vec4 getGroundColor(in vec3 rayPos, in vec2 pos2, in float h)
     truncated2 = mix(0.5, truncated2, slider2*slider2*slider12*tx2);
     
 
-    vec2 sundir = vec2(cos(uTime / 3500.0), sin(uTime / 3500.0));
+    vec2 sundir = vec2(1.0);
     float h2 = land(rayPos.xy+sundir*0.01);
     float shadow = (h-h2) * 10.0 * 5.0 + h*0.1;
     if(shadow < 0.0)
