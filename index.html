@@ -56,11 +56,12 @@ float land(in vec2 uv)
 
 vec3 raystep(in vec2 uv)
 {
+    uv = uv *1.2;
     float rot = timeRot();
     vec2 str = vec2(sin(rot), cos(rot));
     vec2 nrm = vec2(sin(rot+(PI/2.0)), cos(rot+(PI/2.0)));
 
-    vec3 stp = vec3(str+((uv.x - 0.5)*nrm), 0.1-(1.0- uv.y));
+    vec3 stp = vec3(str+((uv.x - 0.5)*nrm), -0.0-(1.0- uv.y));
     float len = length(stp);
     return stp/len;
 }
@@ -110,34 +111,42 @@ vec3 blendColor(vec3 first, vec3 second, float param)
     return f(mixed);
 }
 
+vec2 hash( vec2 p ) // replace this by something better
+{
+  p = vec2( dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3)) );
+  return -1.0 + 2.0*fract(sin(p)*43758.5453123);
+}
+
+float noise( in vec2 p )
+{
+    const float K1 = 0.366025404; // (sqrt(3)-1)/2;
+    const float K2 = 0.211324865; // (3-sqrt(3))/6;
+
+  vec2  i = floor( p + (p.x+p.y)*K1 );
+    vec2  a = p - i + (i.x+i.y)*K2;
+    float m = step(a.y,a.x); 
+    vec2  o = vec2(m,1.0-m);
+    vec2  b = a - o + K2;
+  vec2  c = a - 1.0 + 2.0*K2;
+    vec3  h = max( 0.5-vec3(dot(a,a), dot(b,b), dot(c,c) ), 0.0 );
+  vec3  n = h*h*h*h*vec3( dot(a,hash(i+0.0)), dot(b,hash(i+o)), dot(c,hash(i+1.0)));
+    return dot( n, vec3(70.0) );
+}
+
 vec4 getGroundColor(in vec3 rayPos, in vec2 pos2, in float h)
 {
-    float truncated = asPart(uTime / 1000.0 + rayPos.y/4.0 + floor(rayPos.x*2.0)/3.0) / 4.0 +0.25;
-    float truncated2 = asPart(uTime / 2500.0 + rayPos.y/3.0 + floor(rayPos.x*3.0)/3.0) / 4.0 +0.25;
-
-    float tx1 = pow(abs(0.5 -asPart(rayPos.x*5.15+0.74 )), 2.0);
-    float tx2 = pow(abs(0.5 -asPart(rayPos.x*6.25+0.39 )), 2.0);
-
-
-    float slider1 = psin(20.0*rayPos.x);
-    float slider11 = psin(rayPos.y/2.0 + asPart(uTime / 3500.0)*2.0*PI);
-
-    float slider2 = psin(23.0*rayPos.x/1.7+1.3);
-    float slider12 = psin(rayPos.y/3.0 + asPart(uTime / 3500.0)*2.0*PI);
-
-    truncated = mix(0.5, truncated, slider1*slider1*slider11*tx1);
-    truncated2 = mix(0.5, truncated2, slider2*slider2*slider12*tx2);
-    
-
     vec2 sundir = vec2(1.0);
     float h2 = land(rayPos.xy+sundir*0.01);
-    float shadow = (h-h2) * 10.0 * 5.0 + h*0.1;
+    float shadow = (h-h2) * 10.0 * 7.0 + h*0.1;
     if(shadow < 0.0)
       shadow = 0.0;
 
-    float fade = (0.1 +(truncated-truncated2) + shadow)*0.85 ;
+    float nnoise = (noise(rayPos.xy*2.3) +0.7)*0.03;
+    float fade = (0.1 + nnoise + shadow)*0.85 ;
 
-    vec3 baseColor = vec3(0.9, 0.80, 0.65);
+    vec3 baseColorH = vec3(0.9, 0.80, 0.65);
+    vec3 baseColorL = vec3(0.85, 0.80, 0.7);
+    vec3 baseColor = blendColor(baseColorL, baseColorH, h);
     vec3 color = blendColor(baseColor/2.0, baseColor, fade);
 
     // ship shadow
@@ -186,11 +195,12 @@ vec4 view(in vec2 uv, in vec2 pos2)
     vec3 background = vec3(uv.y-0.4, uv.y-0.3, uv.y-0.3);
     vec4 skybox = vec4(background, 1.0);
     vec3 stp = raystep(uv);
-    vec3 camPos = vec3(pos2-(raystep(vec2(0.5,0.5)).xy*5.0), 3.7);
+    float shipHeight = land(pos2);
+    vec3 camPos = vec3(pos2-(raystep(vec2(0.5,0.5)).xy*13.0), shipHeight+5.7);
     vec3 rayPos = camPos;
 
     float sphereRad = 0.1;
-    vec3 shipPos = vec3(pos2, land(pos2)+sphereRad);
+    vec3 shipPos = vec3(pos2, shipHeight+sphereRad);
 
     float nMinSteps = (rayPos.z-max(1.0, shipPos.z+sphereRad*8.0))/stp.z;
     if(nMinSteps > 0.0)
