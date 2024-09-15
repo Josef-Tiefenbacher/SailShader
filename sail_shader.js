@@ -340,15 +340,15 @@ function handleUp(canvas, event) {
 
 document.addEventListener("keydown", event => {
 var pref = true;
-if(event.keyCode == 37) //left;
+if(event.key == "a" || event.key == "ArrowLeft") //left;
 	left = 1;
-else if(event.keyCode == 38) //up;
+else if(event.key == "w" || event.key == "UpLeft") //up;
 	up = 1;
-else if(event.keyCode == 39) //right;
+else if(event.key == "d" || event.key == "RightLeft") //right;
 	right = 1;
-else if(event.keyCode == 40) //down;
+else if(event.key == "s" || event.key == "DownLeft")  //down;
 	down = 1 ;
-else if(event.keyCode == 32) //space;
+else if(event.key == " ") //space;
 	push = 1 ;
 else
 	pref = false;
@@ -357,15 +357,15 @@ if(pref)
 });
 document.addEventListener("keyup", event => {
 var pref = true;
-if(event.keyCode == 37) //left;
+if(event.key == "a" || event.key == "ArrowLeft") //left;
 	left = 0;
-else if(event.keyCode == 38) //up;
+else if(event.key == "w" || event.key == "UpLeft") //up;
 	up = 0;
-else if(event.keyCode == 39) //right;
+else if(event.key == "d" || event.key == "RightLeft") //right;
 	right = 0;
-else if(event.keyCode == 40) //down;
+else if(event.key == "s" || event.key == "DownLeft")  //down;
 	down = 0 ;
-else if(event.keyCode == 32) //space;
+else if(event.key == " ") //space;
 	push = 0 ;
   event.preventDefault();
 });
