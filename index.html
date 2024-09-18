@@ -1,6 +1,5 @@
 <html>
 	<head>
-		<script type="text/javascript" src="sail_shader.js"></script>
 		<meta http-equiv="refresh" content="10000" >
 		<meta charset="utf-8"/>
 
@@ -27,6 +26,7 @@ varying vec4 vPos;
 uniform vec2 uPos;
 uniform vec2 uDeb;
 uniform float uViewAngle;
+uniform float uViewAngleY;
 uniform float uSailAngle;
 uniform float uTime;
 
@@ -41,10 +41,6 @@ float pcos(in float a)
     return (cos(a) / 2.0) + 0.5;
 }
 
-float timeRot()
-{
-    return uViewAngle;
-}
 
 float land(in vec2 uv)
 {
@@ -56,14 +52,15 @@ float land(in vec2 uv)
 
 vec3 raystep(in vec2 uv)
 {
-    uv = uv *1.2;
-    float rot = timeRot();
-    vec2 str = vec2(sin(rot), cos(rot));
-    vec2 nrm = vec2(sin(rot+(PI/2.0)), cos(rot+(PI/2.0)));
-
-    vec3 stp = vec3(str+((uv.x - 0.5)*nrm), -0.0-(1.0- uv.y));
-    float len = length(stp);
-    return stp/len;
+    uv = (uv - vec2(0.5, 0.0)) * 1.2;
+    float a =  uViewAngle + (uv.x);
+    float b =  uViewAngleY + (uv.y);
+    vec3 look = vec3(
+      sin(a) * cos(b),
+      cos(a) * cos(b),
+      sin(b)
+    );
+    return look;
 }
 
 vec3 ray(in vec3 pos, in vec2 uv, in float dist)
@@ -165,7 +162,7 @@ vec4 charDist(vec3 rayPos, vec3 pos, float rad)
     float h = land(pos.xy);
     float shipDis = length(pos - rayPos) - rad;
 
-    float fullSailAngle = uSailAngle - uViewAngle - PI/2.0;
+    float fullSailAngle = uSailAngle - uViewAngle - PI/2.0 + sin(asPart(uTime/4000.0) *2.0* PI) ;
     vec2 vecSailAngle = vec2(cos(fullSailAngle), sin(fullSailAngle));
     float normalAngle = -sign(uSailAngle) * PI/2.0;
     vec2 normalSailAngle = vec2(cos(fullSailAngle+normalAngle), sin(fullSailAngle+normalAngle));
@@ -196,7 +193,7 @@ vec4 view(in vec2 uv, in vec2 pos2)
     vec4 skybox = vec4(background, 1.0);
     vec3 stp = raystep(uv);
     float shipHeight = land(pos2);
-    vec3 camPos = vec3(pos2-(raystep(vec2(0.5,0.5)).xy*13.0), shipHeight+5.7);
+    vec3 camPos = vec3(pos2, shipHeight)- (raystep(vec2(0.5,0.5))*13.0);
     vec3 rayPos = camPos;
 
     float sphereRad = 0.1;
@@ -235,6 +232,7 @@ void main()
   // gl_FragColor is a special variable a fragment shader
   // is responsible for setting
   vec2 uv = (vPos.xy +vec2(1.0))/2.0;
+  uv = vec2(uv.x, 0.25 + uv.y * 0.5);
   gl_FragColor = view(uv,uPos);
 }
 </script>
@@ -342,7 +340,68 @@ void main()
 
 <script type="text/javascript">
 
+var left = 0;
+var right = 0;
+var up = 0;
+var down = 0;
+var push = 0;
+
+var shaderPos = [0,0];
+var shaderDeb = [0,0];
+var shaderAngle = Math.PI*1.25;
+var shaderAngleY = -Math.PI*0.25;
+var shaderSailAngle = Math.PI;
+
+function psin(a) { return (Math.sin(a)/2.0) + 0.5; }
+function pcos(a) { return (Math.cos(a)/2.0) + 0.5; }
+
+function land(p)
+{
+    var x = (p[0] / 3.0);
+    var y = (p[1] / 3.0);
+    var xy = x+y;
+    return psin(xy+3.0*psin(x)+psin(y)+psin(xy/10.0)*10.0);
+}
+
+var speed = 0;
+var boosting = 0;
+function move(deltaTime)
+{
+
+  var dir = [Math.sin(shaderAngle), Math.cos(shaderAngle)];
+  
+  var p2 = [0,0];
+  p2[0] = shaderPos[0] + (dir[0]*0.001);
+  p2[1] = shaderPos[1] + (dir[1]*0.001);
+  var diffH = (land(p2) - land(shaderPos))*1000;
+  var slopeAdjust = Math.sqrt(1 + (diffH*diffH));
+
+  if(push == 1) boosting = 1;
+  if( diffH > 0) boosting = 0;
+
+  speed += (up-down-diffH-(boosting*diffH*3))*0.005*deltaTime;
+  speed *= Math.pow(0.997, deltaTime/16);
+
+
+  var factor = speed * deltaTime/970;
+
+  factor = factor/slopeAdjust;
+  shaderPos[0]+=dir[0]* factor;
+  shaderPos[1]+=dir[1]* factor;
+}
+function physics(deltaTime)
+{
+  shaderAngle+=(left-right)*0.005*deltaTime; 
+  move(deltaTime);
+}
+
+var oldTime = null;
 function animateScene(time ) {
+  var deltaTime = 0;
+  if(oldTime != null)
+    deltaTime = time-oldTime;
+  physics(deltaTime);
+  oldTime = time;
   gl.viewport(0, 0, glCanvas.width, glCanvas.height);
   gl.useProgram(baseShaderProgram);
 
@@ -351,6 +410,7 @@ function animateScene(time ) {
   uTime = gl.getUniformLocation(baseShaderProgram, "uTime");
   iResolution = gl.getUniformLocation(baseShaderProgram, "iResolution");
   uViewAngle = gl.getUniformLocation(baseShaderProgram, "uViewAngle");    
+  uViewAngleY = gl.getUniformLocation(baseShaderProgram, "uViewAngleY");    
   uSailAngle = gl.getUniformLocation(baseShaderProgram, "uSailAngle");    
 
   gl.uniform2fv(uPos, shaderPos);
@@ -358,6 +418,7 @@ function animateScene(time ) {
   gl.uniform1f(uTime, time);
   gl.uniform2fv(iResolution, [glCanvas.width, glCanvas.height]);
   gl.uniform1f(uViewAngle, shaderAngle);
+  gl.uniform1f(uViewAngleY, shaderAngleY);
   gl.uniform1f(uSailAngle, shaderSailAngle);
 
 
@@ -392,10 +453,7 @@ function animateScene(time ) {
   });
 }
 
-var shaderPos = [0,0];
-var shaderDeb = [0,0];
-var shaderAngle = Math.PI*1.25;
-var shaderSailAngle = Math.PI*1.25;
+
 
 
 let gl = null;
@@ -460,10 +518,23 @@ function startup() {
 
 
   // end texture
+  
+  glCanvas.onpointerdown = (e) => {
+    glCanvas.onpointermove = mousemove;
+    glCanvas.setPointerCapture(e.pointerId);
+    glCanvas.requestPointerLock();
+  }
+
 
   animateScene();
 }
 
+function mousemove(e) {
+  shaderAngle -= (e.movementX)/500;
+  shaderAngleY -= (e.movementY)/500;
+  if(-shaderAngleY < Math.PI*0.25) shaderAngleY = -Math.PI*0.25;
+  if(-shaderAngleY > Math.PI*0.35) shaderAngleY = -Math.PI*0.35;
+}
 
 function buildShaderProgram(shaderInfo) {
   let program = gl.createProgram();
@@ -510,15 +581,46 @@ function gKernel(n, s)
   var normfac = 1 / kernel.reduce((a,b)=>a+b) ;
   return kernel.map((x) => x * normfac);
 }
+
+document.addEventListener("keydown", event => {
+var pref = true;
+if(event.key == "a" || event.key == "ArrowLeft") //left;
+  left = 1;
+else if(event.key == "w" || event.key == "ArrowUp") //up;
+  up = 1;
+else if(event.key == "d" || event.key == "ArrowRight") //right;
+  right = 1;
+else if(event.key == "s" || event.key == "ArrowDown")  //down;
+  down = 1 ;
+else if(event.key == " ") //space;
+  push = 1 ;
+else
+  pref = false;
+if(pref)
+  event.preventDefault();
+});
+document.addEventListener("keyup", event => {
+var pref = true;
+if(event.key == "a" || event.key == "ArrowLeft") //left;
+  left = 0;
+else if(event.key == "w" || event.key == "ArrowUp") //up;
+  up = 0;
+else if(event.key == "d" || event.key == "ArrowRight") //right;
+  right = 0;
+else if(event.key == "s" || event.key == "ArrowDown")  //down;
+  down = 0 ;
+else if(event.key == " ") //space;
+  push = 0 ;
+  event.preventDefault();
+});
+
 </script>
 
 </HEAD>
 <body style="background-color:#333333; color: #999999">
-  <canvas id="glcanvas" width="800" height="600">
+  <canvas id="glcanvas" width="1800" height="900">
     Oh no! Your browser doesn't support canvas!
   </canvas>
-	<canvas id = 'c' width="800" height="600"></canvas>
-	<div id ='div'> </div>
   <br>
   <input type=checkbox id="postprocessing" checked> postprocessing
 </body>
