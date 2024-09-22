@@ -52,15 +52,28 @@ float land(in vec2 uv)
 
 vec3 raystep(in vec2 uv)
 {
-    uv = (uv - vec2(0.5, 0.0)) * 1.2;
-    float a =  uViewAngle + (uv.x);
-    float b =  uViewAngleY + (uv.y);
+    uv = (uv - vec2(0.5, 0.0));
     vec3 look = vec3(
-      sin(a) * cos(b),
-      cos(a) * cos(b),
-      sin(b)
+      sin(uViewAngle) * cos(uViewAngleY),
+      cos(uViewAngle) * cos(uViewAngleY),
+      sin(uViewAngleY)
     );
-    return look;
+
+    vec3 xNorm = vec3(
+      sin(uViewAngle + PI/2.0),
+      cos(uViewAngle + PI/2.0),
+      0.0
+    );
+    xNorm = xNorm / length(xNorm);
+
+    vec3 yNorm = vec3(
+      sin(uViewAngle) * cos(uViewAngleY+ PI/2.0),
+      cos(uViewAngle) * cos(uViewAngleY+ PI/2.0),
+      sin(uViewAngleY+ PI/2.0)
+    );
+    yNorm = yNorm / length(yNorm);
+
+    return look + (xNorm*uv.x) + (yNorm*uv.y);
 }
 
 vec3 ray(in vec3 pos, in vec2 uv, in float dist)
@@ -160,9 +173,14 @@ vec4 getGroundColor(in vec3 rayPos, in vec2 pos2, in float h)
 vec4 charDist(vec3 rayPos, vec3 pos, float rad)
 {
     float h = land(pos.xy);
-    float shipDis = length(pos - rayPos) - rad;
+    float colBase = (rayPos.z-h)*8.0 -0.4 ;
+    colBase = colBase* 0.5 + h*0.4;
 
-    float fullSailAngle = uSailAngle - uViewAngle - PI/2.0 + sin(asPart(uTime/4000.0) *2.0* PI) ;
+    float shipDis = length(pos - rayPos) - rad;
+    return vec4(vec3(0.2 + 0.7 * colBase),  shipDis);
+
+/*
+    float fullSailAngle = uSailAngle - uViewAngle - PI/2.0 +1.0; //+sin(asPart(uTime/4000.0) *2.0* PI) ;
     vec2 vecSailAngle = vec2(cos(fullSailAngle), sin(fullSailAngle));
     float normalAngle = -sign(uSailAngle) * PI/2.0;
     vec2 normalSailAngle = vec2(cos(fullSailAngle+normalAngle), sin(fullSailAngle+normalAngle));
@@ -179,12 +197,12 @@ vec4 charDist(vec3 rayPos, vec3 pos, float rad)
     float aboveGroud = gap - (rayPos.z-(h+0.5*gap));
     sailDis = max(sailDis, aboveGroud);
 
-    float colBase = (rayPos.z-h)*8.0 -0.4 ;
-    colBase = colBase* 0.5 + h*0.4;
+
     if(shipDis < sailDis || shipDis< 0.05)
       return vec4(vec3(0.2 + 0.7 * colBase),  shipDis);
     else
       return vec4(vec3(0.4*colBase),  sailDis);
+*/
 }
 
 vec4 view(in vec2 uv, in vec2 pos2)
@@ -193,7 +211,7 @@ vec4 view(in vec2 uv, in vec2 pos2)
     vec4 skybox = vec4(background, 1.0);
     vec3 stp = raystep(uv);
     float shipHeight = land(pos2);
-    vec3 camPos = vec3(pos2, shipHeight)- (raystep(vec2(0.5,0.5))*13.0);
+    vec3 camPos = vec3(pos2, shipHeight)- (raystep(vec2(0.5,0.5))*15.0);
     vec3 rayPos = camPos;
 
     float sphereRad = 0.1;
@@ -289,7 +307,6 @@ vec3 blendColor(vec3 first, vec3 second, float param)
     vec3 mixed = mix(first, second, param);
     return f(mixed);
 }
-
 
 vec2 conv(vec2 pos)
 {
@@ -532,8 +549,8 @@ function startup() {
 function mousemove(e) {
   shaderAngle -= (e.movementX)/500;
   shaderAngleY -= (e.movementY)/500;
-  if(-shaderAngleY < Math.PI*0.25) shaderAngleY = -Math.PI*0.25;
-  if(-shaderAngleY > Math.PI*0.35) shaderAngleY = -Math.PI*0.35;
+  if(-shaderAngleY < Math.PI*0.20) shaderAngleY = -Math.PI*0.20;
+  if(-shaderAngleY > Math.PI*0.5) shaderAngleY = -Math.PI*0.5;
 }
 
 function buildShaderProgram(shaderInfo) {
