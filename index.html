@@ -25,6 +25,7 @@ varying vec4 vPos;
 
 uniform vec2 uPos;
 uniform vec2 uDeb;
+uniform vec2 uResolution;
 uniform float uViewAngle;
 uniform float uViewAngleY;
 uniform float uSailAngle;
@@ -211,7 +212,7 @@ vec4 view(in vec2 uv, in vec2 pos2)
     vec4 skybox = vec4(background, 1.0);
     vec3 stp = raystep(uv);
     float shipHeight = land(pos2);
-    vec3 camPos = vec3(pos2, shipHeight)- (raystep(vec2(0.5,0.5))*15.0);
+    vec3 camPos = vec3(pos2, shipHeight)- (raystep(vec2(0.5,0.5))*7.0);
     vec3 rayPos = camPos;
 
     float sphereRad = 0.1;
@@ -250,7 +251,15 @@ void main()
   // gl_FragColor is a special variable a fragment shader
   // is responsible for setting
   vec2 uv = (vPos.xy +vec2(1.0))/2.0;
-  uv = vec2(uv.x, 0.25 + uv.y * 0.5);
+  float aspect = uResolution.y / uResolution.x;
+
+  bool swtch = uResolution.y > uResolution.x;
+  if(swtch) aspect = uResolution.x / uResolution.y;
+
+  if(swtch) uv = vec2(uv.y, uv.x);
+  uv = vec2(uv.x, ((1.0-aspect)/2.0) + (uv.y * aspect));
+  if(swtch) uv = vec2(uv.y, uv.x);
+  
   gl_FragColor = view(uv,uPos);
 }
 </script>
@@ -424,16 +433,16 @@ function animateScene(time ) {
 
   uPos = gl.getUniformLocation(baseShaderProgram, "uPos");
   uDeb = gl.getUniformLocation(baseShaderProgram, "uDeb");
+  uResolution = gl.getUniformLocation(baseShaderProgram, "uResolution");
   uTime = gl.getUniformLocation(baseShaderProgram, "uTime");
-  iResolution = gl.getUniformLocation(baseShaderProgram, "iResolution");
   uViewAngle = gl.getUniformLocation(baseShaderProgram, "uViewAngle");    
   uViewAngleY = gl.getUniformLocation(baseShaderProgram, "uViewAngleY");    
   uSailAngle = gl.getUniformLocation(baseShaderProgram, "uSailAngle");    
 
   gl.uniform2fv(uPos, shaderPos);
   gl.uniform2fv(uDeb, shaderDeb);
+  gl.uniform2fv(uResolution, [glCanvas.width, glCanvas.height]);
   gl.uniform1f(uTime, time);
-  gl.uniform2fv(iResolution, [glCanvas.width, glCanvas.height]);
   gl.uniform1f(uViewAngle, shaderAngle);
   gl.uniform1f(uViewAngleY, shaderAngleY);
   gl.uniform1f(uSailAngle, shaderSailAngle);
@@ -635,7 +644,7 @@ else if(event.key == " ") //space;
 
 </HEAD>
 <body style="background-color:#333333; color: #999999">
-  <canvas id="glcanvas" width="1800" height="900">
+  <canvas id="glcanvas" width="800" height="900">
     Oh no! Your browser doesn't support canvas!
   </canvas>
   <br>
