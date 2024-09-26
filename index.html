@@ -74,7 +74,8 @@ vec3 raystep(in vec2 uv)
     );
     yNorm = yNorm / length(yNorm);
 
-    return look + (xNorm*uv.x) + (yNorm*uv.y);
+    vec3 res = look + (xNorm*uv.x) + (yNorm*uv.y);
+    return res/length(res);
 }
 
 vec3 ray(in vec3 pos, in vec2 uv, in float dist)
@@ -173,7 +174,7 @@ vec4 getGroundColor(in vec3 rayPos, in vec2 pos2, in float h)
 
 vec4 charDist(vec3 rayPos, vec3 pos, float rad)
 {
-    float h = land(pos.xy);
+    float h = pos.z-rad;
     float colBase = (rayPos.z-h)*8.0 -0.4 ;
     colBase = colBase* 0.5 + h*0.4;
 
@@ -644,7 +645,7 @@ else if(event.key == " ") //space;
 
 </HEAD>
 <body style="background-color:#333333; color: #999999">
-  <canvas id="glcanvas" width="800" height="900">
+  <canvas id="glcanvas" width="1800" height="900">
     Oh no! Your browser doesn't support canvas!
   </canvas>
   <br>
