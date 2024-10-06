@@ -214,15 +214,19 @@ vec4 view(in vec2 uv, in vec2 pos2)
     vec3 stp = raystep(uv);
     float shipHeight = land(pos2);
     vec3 camPos = vec3(pos2, shipHeight)- (raystep(vec2(0.5,0.5))*7.0);
-    vec3 rayPos = camPos;
+    if(camPos.z < land(camPos.xy)+0.5)
+      camPos.z = land(camPos.xy)+0.5;
+    vec3 rayPos = camPos+ (stp*0.5);
+
+    if(rayPos.z < land(rayPos.xy))
+      return vec4(1.0);
 
     float sphereRad = 0.1;
     vec3 shipPos = vec3(pos2, shipHeight+sphereRad);
 
     float nMinSteps = (rayPos.z-max(1.0, shipPos.z+sphereRad*8.0))/stp.z;
-    if(nMinSteps > 0.0)
-      return skybox;
-    rayPos = rayPos +(stp*-nMinSteps);
+    //if(rayPos.z > 1.0 && nMinSteps > 0.0)
+    // s rayPos = rayPos +(stp*-nMinSteps);
     for(float i = 0.0; i< 1000.0; i++)
     {
       float dist = length(rayPos - camPos);
@@ -559,7 +563,7 @@ function startup() {
 function mousemove(e) {
   shaderAngle -= (e.movementX)/500;
   shaderAngleY -= (e.movementY)/500;
-  if(-shaderAngleY < Math.PI*0.20) shaderAngleY = -Math.PI*0.20;
+  //if(-shaderAngleY < Math.PI*0.20) shaderAngleY = -Math.PI*0.20;
   if(-shaderAngleY > Math.PI*0.5) shaderAngleY = -Math.PI*0.5;
 }
 
