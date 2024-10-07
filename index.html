@@ -156,7 +156,7 @@ vec4 getCloud(in vec3 rayPos, in vec3 stp, in vec3 sky, in vec3 shipPos)
       float n = (nn) / 5.0;
       vec3 col = blendColor(sky, vec3(0.7), n);
       float viewD = abs(length(rayPos-shipPos));
-      col = blendColor(sky, col, 20.0 / viewD);
+      col = blendColor(sky, col, 15.0 / viewD);
       return vec4(col, dst);
     }
     return vec4(vec3(1.0), dst);
