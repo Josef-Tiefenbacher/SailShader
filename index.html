@@ -150,8 +150,8 @@ vec4 getCloud(in vec3 rayPos, in vec3 stp, in vec3 sky, in vec3 shipPos)
     float dst = abs(20.0 - rayPos.z);
     if(dst < 0.2)
     {
-      float nn = (1.0 + noise(rayPos.xy / 25.0)) / 2.0;
-      if(nn < 0.5)
+      float nn = (1.0 + noise(rayPos.xy / 25.0 + uTime/20000.0)) / 2.0;
+      if(nn < 0.5 + 0.05*sin((rayPos.x / 25.0)))
         nn = 0.0;
       float n = (nn) / 5.0;
       vec3 col = blendColor(sky, vec3(0.7), n);
