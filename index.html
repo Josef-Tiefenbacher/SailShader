@@ -45,7 +45,7 @@ float pcos(in float a)
 
 float land(in vec2 uv)
 {
-    uv= uv /3.0;
+    uv= uv /5.0;
     float xy = uv.x+uv.y;
     float val = psin(xy+3.0*psin(uv.x)+psin(uv.y)+psin(xy/10.0)*10.0);
     return val;
@@ -221,7 +221,7 @@ vec4 view(in vec2 uv, in vec2 pos2)
       vec4 sphereDst = charDist(rayPos, shipPos, sphereRad);
       if(sphereDst.w < 0.0)
       {
-      	return vec4(sphereDst.xyz, 1.5);
+      	return vec4(sphereDst.xyz, 0.0);
       }
 
       vec4 cloudDst = getCloud(rayPos, stp, skybox.xyz, shipPos);
@@ -336,6 +336,44 @@ vec2 conv(vec2 pos)
   return g;
 }
 
+const float KUWA_S = 15.0;
+
+vec3 getSafeColAt(vec2 samplePos, vec4 baseC)
+{
+   vec4 c = texture2D(u_image, samplePos);
+   if( abs(c.w-baseC.w) < 0.1 )
+    return c.xyz;
+   return baseC.xyz; 
+}
+
+vec4 kuwaharaQ(vec2 pos, vec2 step)
+{
+  vec4 baseC = texture2D(u_image, pos);
+  vec3 colSum = vec3(0.0);
+
+  for(float x = 1.0; x <= KUWA_S; x++)
+  for(float y = 1.0; y <= KUWA_S; y++)
+  {
+    vec2 samplePos = pos + vec2(step.x*x, step.y*y);
+    colSum += getSafeColAt(samplePos, baseC);
+  }
+  vec3 avgCol = colSum / (KUWA_S * KUWA_S);
+  float mean = (avgCol.x + avgCol.y + avgCol.z) / 3.0;
+
+  float sum = 0.0;
+  for(float x = 1.0; x <= KUWA_S; x++)
+  for(float y = 1.0; y <= KUWA_S; y++)
+  {
+    vec2 samplePos = pos + vec2(step.x*x, step.y*y);
+    vec3 val = getSafeColAt(samplePos, baseC);
+    float dev = ((val.x + val.y + val.z) / 3.0)-mean;
+    sum += dev*dev;
+  }
+
+  float vari = sum / (KUWA_S * KUWA_S);
+  return vec4(avgCol, vari);
+}
+
 void main() 
 {
   vec2 pos = vec2(0.5)+ vec2(-0.5 * vPos.x, 0.5*vPos.y);
@@ -347,13 +385,31 @@ void main()
       return;
   }
 
+  vec3 baseCol = at.rgb;
+
+  if(at.w > 0.0)
+  {
+    vec2 step = vec2(1.0 / uRes.x, 1.0 / uRes.y);
+    vec4 kuwa = kuwaharaQ(pos, step);
+    vec4 kuwa2 = kuwaharaQ(pos, step * vec2(1.0, -1.0));
+    if(kuwa2.w < kuwa.w)
+      kuwa = kuwa2;
+    kuwa2 = kuwaharaQ(pos, step * vec2(-1.0, 1.0));
+    if(kuwa2.w < kuwa.w)
+      kuwa = kuwa2;
+    kuwa2 = kuwaharaQ(pos, step * vec2(-1.0, -1.0));
+    if(kuwa2.w < kuwa.w)
+      kuwa = kuwa2;
+
+    baseCol = kuwa.rgb;
+  }
   vec2 convs = conv(pos);
   float diff = (convs.x-convs.y) * 108.0;
   if(diff < 0.0) diff = 0.0;
   if(diff > 0.7) diff = 1.0;
   else if(diff < 0.15) diff = 0.0 ;
 
-  vec3 col = blendColor(at.rgb, vec3(0.3), diff * (1.0-(at.a*at.a)));
+  vec3 col = blendColor(baseCol, vec3(0.3), diff * (1.0-(at.a*at.a)));
   gl_FragColor = vec4(col, 1.0);
 }
 
@@ -382,8 +438,8 @@ function pcos(a) { return (Math.cos(a)/2.0) + 0.5; }
 
 function land(p)
 {
-    var x = (p[0] / 3.0);
-    var y = (p[1] / 3.0);
+    var x = (p[0] / 5.0);
+    var y = (p[1] / 5.0);
     var xy = x+y;
     return psin(xy+3.0*psin(x)+psin(y)+psin(xy/10.0)*10.0);
 }
