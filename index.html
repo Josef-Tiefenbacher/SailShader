@@ -24,12 +24,18 @@ precision highp float;
 varying vec4 vPos;
 
 uniform vec2 uPos;
-uniform vec2 uDeb;
 uniform vec2 uResolution;
 uniform float uViewAngle;
 uniform float uViewAngleY;
 uniform float uSailAngle;
 uniform float uTime;
+
+uniform vec3 uSkyColor;
+uniform vec3 uSkyColor2;
+uniform vec3 uGroundColor;
+uniform vec3 uGroundColor2;
+uniform vec3 uCharColor;
+uniform vec3 uCharColor2;
 
 #define PI     3.14159265
 
@@ -173,8 +179,8 @@ vec4 getGroundColor(in vec3 rayPos, in vec2 pos2, in float h)
     float nnoise = (noise(rayPos.xy*2.3) +0.7)*0.03;
     float fade = (0.1 + nnoise + shadow)*0.85 ;
 
-    vec3 baseColorH = vec3(0.9, 0.80, 0.65);
-    vec3 baseColorL = vec3(0.85, 0.80, 0.7);
+    vec3 baseColorH = uGroundColor2; //vec3(0.9, 0.80, 0.65);
+    vec3 baseColorL = uGroundColor; //vec3(0.85, 0.80, 0.7);
     vec3 baseColor = blendColor(baseColorL, baseColorH, h);
     vec3 color = blendColor(baseColor/2.0, baseColor, fade);
 
@@ -192,17 +198,17 @@ vec4 getGroundColor(in vec3 rayPos, in vec2 pos2, in float h)
 vec4 charDist(vec3 rayPos, vec3 pos, float rad)
 {
     float h = pos.z-rad;
-    float colBase = (rayPos.z-h)*8.0 -0.4 ;
-    colBase = colBase* 0.5 + h*0.4;
+    float interpol = (rayPos.z-h) / (2.0*rad);
+    vec3 col = blendColor(uCharColor, uCharColor2, interpol);
 
     float shipDis = length(pos - rayPos) - rad;
-    return vec4(vec3(0.2 + 0.7 * colBase),  shipDis);
+    return vec4(col,  shipDis);
 }
 
 vec4 view(in vec2 uv, in vec2 pos2)
 {
     vec3 stp = raystep(uv);
-    vec3 background = (vec3(stp.z+1.0)/2.0) - vec3(0.4, 0.3, 0.3);
+    vec3 background = blendColor(uSkyColor, uSkyColor2, abs(stp.z)); 
     vec4 skybox = vec4(background, 1.0);
     float shipHeight = land(pos2);
     vec3 camPos = vec3(pos2, shipHeight)- (raystep(vec2(0.5,0.5))*7.0);
@@ -341,7 +347,7 @@ const float KUWA_S = 5.0;
 vec3 getSafeColAt(vec2 samplePos, vec4 baseC)
 {
    vec4 c = texture2D(u_image, samplePos);
-   if( abs(c.w-baseC.w) < 0.05 )
+   if( abs(c.w-baseC.w) < 0.05 && c.w > 0.0 && c.w < 1.0)
     return c.xyz;
    return baseC.xyz; 
 }
@@ -487,21 +493,21 @@ function animateScene(time ) {
   gl.viewport(0, 0, glCanvas.width, glCanvas.height);
   gl.useProgram(baseShaderProgram);
 
-  uPos = gl.getUniformLocation(baseShaderProgram, "uPos");
-  uDeb = gl.getUniformLocation(baseShaderProgram, "uDeb");
-  uResolution = gl.getUniformLocation(baseShaderProgram, "uResolution");
-  uTime = gl.getUniformLocation(baseShaderProgram, "uTime");
-  uViewAngle = gl.getUniformLocation(baseShaderProgram, "uViewAngle");    
-  uViewAngleY = gl.getUniformLocation(baseShaderProgram, "uViewAngleY");    
-  uSailAngle = gl.getUniformLocation(baseShaderProgram, "uSailAngle");    
 
-  gl.uniform2fv(uPos, shaderPos);
-  gl.uniform2fv(uDeb, shaderDeb);
-  gl.uniform2fv(uResolution, [glCanvas.width, glCanvas.height]);
-  gl.uniform1f(uTime, time);
-  gl.uniform1f(uViewAngle, shaderAngle);
-  gl.uniform1f(uViewAngleY, shaderAngleY);
-  gl.uniform1f(uSailAngle, shaderSailAngle);
+  setVec2 (baseShaderProgram, "uPos", shaderPos);
+  setVec2 (baseShaderProgram, "uResolution", [glCanvas.width, glCanvas.height]);
+  setFloat(baseShaderProgram, "uTime", time);
+  setFloat(baseShaderProgram, "uViewAngle", shaderAngle);
+  setFloat(baseShaderProgram, "uViewAngleY", shaderAngleY);
+  setFloat(baseShaderProgram, "uSailAngle", shaderSailAngle);
+
+  setColorOption(baseShaderProgram, "uSkyColor", uSkyColor.value);
+  setColorOption(baseShaderProgram, "uSkyColor2", uSkyColor2.value);
+  setColorOption(baseShaderProgram, "uGroundColor", uGroundColor.value);
+  setColorOption(baseShaderProgram, "uGroundColor2", uGroundColor2.value);
+  setColorOption(baseShaderProgram, "uCharColor", uCharColor.value);
+  setColorOption(baseShaderProgram, "uCharColor2", uCharColor2.value);
+
 
 
   gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
@@ -518,14 +524,11 @@ function animateScene(time ) {
 
   gl.useProgram(postProcessingshaderProgram);
   
-  uRes = gl.getUniformLocation(postProcessingshaderProgram, "uRes");    
-  gl.uniform2fv(uRes, [glCanvas.width, glCanvas.height]);  
-  postprocessingLocation = gl.getUniformLocation(postProcessingshaderProgram, "postprocessing");    
-  gl.uniform1f(postprocessingLocation, postprocessing.checked);
-  kernel1 = gl.getUniformLocation(postProcessingshaderProgram, "kernel1");    
-  gl.uniform1fv(kernel1, gKernel(2, 0.8));
-  kernel2 = gl.getUniformLocation(postProcessingshaderProgram, "kernel2");    
-  gl.uniform1fv(kernel2, gKernel(2, 2.5));
+  setVec2 (postProcessingshaderProgram, "uRes", [glCanvas.width, glCanvas.height]);
+  setFloat(postProcessingshaderProgram, "postprocessing",  postprocessing.checked);
+  setArray(postProcessingshaderProgram, "kernel1",  gKernel(2, 0.8));
+  setArray(postProcessingshaderProgram, "kernel2",  gKernel(2, 2.5));
+
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -535,7 +538,32 @@ function animateScene(time ) {
   });
 }
 
+function setVec2(prog, name, value)
+{
+    var loc = gl.getUniformLocation(prog, name);
+    gl.uniform2fv(loc, value);
+}
 
+function setFloat(prog, name, value)
+{
+    var loc = gl.getUniformLocation(prog, name);
+    gl.uniform1f(loc, value);
+}
+
+function setArray(prog, name, value)
+{
+    var loc = gl.getUniformLocation(prog, name);
+    gl.uniform1fv(loc, value);
+}
+
+function setColorOption(prog, name, value)
+{
+    var r = Number("0x"+value.substring(0,2)) / 255.0;
+    var g = Number("0x"+value.substring(2,4)) / 255.0;
+    var b = Number("0x"+value.substring(4,6)) / 255.0;
+    var loc = gl.getUniformLocation(prog, name);
+    gl.uniform3fv(loc, [r,g,b]);
+}
 
 
 let gl = null;
@@ -704,6 +732,16 @@ else if(event.key == " ") //space;
     Oh no! Your browser doesn't support canvas!
   </canvas>
   <br>
-  <input type=checkbox id="postprocessing" checked> postprocessing
+  <input type=checkbox id="postprocessing" checked> postprocessing <br>
+  <input type=text id="uSkyColor" value="114444">  uSkyColor <br>
+  <input type=text id="uSkyColor2" value="448888">  uSkyColor2 <br>
+  <input type=text id="uGroundColor" value="ccbb99">  uGroundColor <br>
+  <input type=text id="uGroundColor2" value="eeddbb">  uGroundColor2 <br>
+  <input type=text id="uCharColor" value="444444">  uCharColor <br>
+  <input type=text id="uCharColor2" value="eeeeee">  uCharColor2 <br>
+
+
+
+
 </body>
 </html>
