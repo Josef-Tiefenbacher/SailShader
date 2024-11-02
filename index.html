@@ -205,6 +205,25 @@ vec4 charDist(vec3 rayPos, vec3 pos, float rad)
     return vec4(col,  shipDis);
 }
 
+
+vec4 stuffDist(vec3 rayPos)
+{
+  float scale = 300.0;
+  vec2 pos2 =  rayPos.xy / scale;
+  pos2 = vec2(floor(pos2.x)+0.5, floor(pos2.y)+0.5) * scale;
+  vec3 pos = vec3(pos2, land(pos2) * 1.5);
+    float dis = length(pos - rayPos) - 5.0;
+    return vec4(uCharColor2,  dis);
+}
+
+vec3 fog(vec3 col, vec3 background, vec3 rayPos, vec3 refP)
+{
+  float d = length(rayPos - refP) / 90.0; 
+  if(d > 1.0)
+    d = 1.0;
+  return blendColor(background, col, 1.0 - (d*d));
+}
+
 vec4 view(in vec2 uv, in vec2 pos2)
 {
     vec3 stp = raystep(uv);
@@ -230,6 +249,12 @@ vec4 view(in vec2 uv, in vec2 pos2)
       	return vec4(sphereDst.xyz, 0.0);
       }
 
+      vec4 stuffDst = stuffDist(rayPos);
+      if(stuffDst.w < 0.0)
+      {
+        return vec4(fog(stuffDst.xyz, background, rayPos, shipPos), 0.0);
+      }
+
       vec4 cloudDst = getCloud(rayPos, stp, skybox.xyz, shipPos);
       if(cloudDst.w < 0.1)
         return vec4(cloudDst.xyz, 1.0);
@@ -238,14 +263,13 @@ vec4 view(in vec2 uv, in vec2 pos2)
       if(rayPos.z < h+0.01)
       {
         vec4 groundColor = getGroundColor(rayPos, pos2, h);
-        return vec4(blendColor(background, groundColor.xyz, 1.0 - (groundColor.w*groundColor.w)), groundColor.w);
+        return vec4(fog(groundColor.xyz, background, rayPos, shipPos), groundColor.w);
       }
-
 
       float stpDist = abs(h-rayPos.z)+0.001;
       stpDist = min(sphereDst.w + 0.001, stpDist);
       stpDist = min(cloudDst.w + 0.001, stpDist);
-
+      stpDist = min(stuffDst.w + 0.001, stpDist);
 
       rayPos = rayPos+(stp * stpDist);
     }
