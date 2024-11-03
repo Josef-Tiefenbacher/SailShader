@@ -526,6 +526,7 @@ function move(deltaTime)
   shaderPos[0]+=dir[0]* factor;
   shaderPos[1]+=dir[1]* factor;
 }
+
 function physics(deltaTime)
 {
   shaderAngle+=(left-right)*0.005*deltaTime; 
@@ -537,6 +538,10 @@ function animateScene(time ) {
   var deltaTime = 0;
   if(oldTime != null)
     deltaTime = time-oldTime;
+  if(deltaTime < 0)
+    deltaTime = 0;
+  if(deltaTime > 100)
+    deltaTime = 100;
   physics(deltaTime);
   oldTime = time;
   gl.viewport(0, 0, glCanvas.width, glCanvas.height);
