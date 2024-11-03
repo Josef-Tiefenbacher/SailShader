@@ -184,11 +184,6 @@ vec4 getGroundColor(in vec3 rayPos, in vec2 pos2, in float h)
     vec3 baseColor = blendColor(baseColorL, baseColorH, h);
     vec3 color = blendColor(baseColor/2.0, baseColor, fade);
 
-    // ship shadow
-    float centerDist = distance(rayPos, vec3(pos2-sundir*0.05, h));  
-    if(centerDist < 0.1)
-      color = blendColor(color/2.0, color, pow(centerDist*10.0,2.0));
-
     float viewDist = distance(rayPos, vec3(pos2, h)) / 60.0;
     if(viewDist > 1.0)
        viewDist = 1.0;
@@ -198,22 +193,43 @@ vec4 getGroundColor(in vec3 rayPos, in vec2 pos2, in float h)
 vec4 charDist(vec3 rayPos, vec3 pos, float rad)
 {
     float h = pos.z-rad;
-    float interpol = (rayPos.z-h) / (2.0*rad);
-    vec3 col = blendColor(uCharColor, uCharColor2, interpol);
+    vec3 normal = normalize(rayPos-pos);
+    vec3 sundir = normalize(vec3(1.0, 1.0, 2.0));
+    float shadow = clamp(dot(sundir, normal)/ 2.0 + 0.3, 0.0, 1.0);
+    vec3 col = blendColor(uCharColor, uCharColor2, shadow);
 
     float shipDis = length(pos - rayPos) - rad;
     return vec4(col,  shipDis);
 }
 
 
-vec4 stuffDist(vec3 rayPos)
+vec4 orbDist(vec3 rayPos)
 {
-  float scale = 300.0;
+  float scale = 100.0;
   vec2 pos2 =  rayPos.xy / scale;
   pos2 = vec2(floor(pos2.x)+0.5, floor(pos2.y)+0.5) * scale;
-  vec3 pos = vec3(pos2, land(pos2) * 1.5);
-    float dis = length(pos - rayPos) - 5.0;
-    return vec4(uCharColor2,  dis);
+  vec3 pos = vec3(pos2, land(pos2) );
+  float dis = length(pos - rayPos) - 5.0;
+
+  vec3 normal = normalize(rayPos-pos);
+  vec3 sundir = normalize(vec3(1.0, 1.0, 2.0));
+  float shadow = clamp(dot(sundir, normal)/ 2.0, 0.0, 1.0);
+
+  return vec4(blendColor(uGroundColor/ 2.0, uCharColor2 , shadow), dis);
+}
+
+vec4 scatterDist(vec3 rayPos)
+{
+  float scale = 3.0;
+  vec2 pos2 =  rayPos.xy / scale;
+  pos2 = vec2(floor(pos2.x)+0.5, floor(pos2.y)+0.5) * scale;
+  vec3 pos = vec3(pos2, land(pos2) + 0.2);
+  float dis = 3.0;
+  if(rayPos.z > pos.z)
+    dis = length(pos - rayPos) - 0.05;
+  else
+    dis = length(pos.xy - rayPos.xy) - 0.05;
+  return vec4(uGroundColor,  dis);
 }
 
 vec3 fog(vec3 col, vec3 background, vec3 rayPos, vec3 refP)
@@ -249,11 +265,17 @@ vec4 view(in vec2 uv, in vec2 pos2)
       	return vec4(sphereDst.xyz, 0.0);
       }
 
-      vec4 stuffDst = stuffDist(rayPos);
-      if(stuffDst.w < 0.0)
+      vec4 orbDst = orbDist(rayPos);
+      if(orbDst.w < 0.0)
       {
-        return vec4(fog(stuffDst.xyz, background, rayPos, shipPos), 0.0);
+        return vec4(fog(orbDst.xyz, background, rayPos, shipPos), 0.0);
       }
+
+      /*vec4 scatterDst = scatterDist(rayPos);
+      if(scatterDst.w < 0.0)
+      {
+        return vec4(fog(scatterDst.xyz, background, rayPos, shipPos), 0.0);
+      }*/
 
       vec4 cloudDst = getCloud(rayPos, stp, skybox.xyz, shipPos);
       if(cloudDst.w < 0.1)
@@ -269,7 +291,8 @@ vec4 view(in vec2 uv, in vec2 pos2)
       float stpDist = abs(h-rayPos.z)+0.001;
       stpDist = min(sphereDst.w + 0.001, stpDist);
       stpDist = min(cloudDst.w + 0.001, stpDist);
-      stpDist = min(stuffDst.w + 0.001, stpDist);
+      stpDist = min(orbDst.w + 0.001, stpDist);
+      //stpDist = min(scatterDst.w + 0.001, stpDist);
 
       rayPos = rayPos+(stp * stpDist);
     }
@@ -490,14 +513,14 @@ function move(deltaTime)
   var diffH = (land(p2) - land(shaderPos))*1000;
   var slopeAdjust = Math.sqrt(1 + (diffH*diffH));
 
-  if(push == 1) boosting = 1;
-  if( diffH > 0) boosting = 0;
+  var timefact = 0.005*deltaTime;
 
-  speed += (up-down-diffH-(boosting*diffH*3))*0.005*deltaTime;
-  speed *= Math.pow(0.997, deltaTime/16);
+  speed += (up-down-diffH)*timefact;
+  speed -= Math.sign(speed)* (Math.pow((1.0+Math.abs(speed)), 2.0)-1.0)*0.1*timefact;
+  
 
 
-  var factor = speed * deltaTime/970;
+  var factor = speed * timefact;
 
   factor = factor/slopeAdjust;
   shaderPos[0]+=dir[0]* factor;
