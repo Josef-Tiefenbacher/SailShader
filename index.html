@@ -176,7 +176,7 @@ vec4 getGroundColor(in vec3 rayPos, in vec2 pos2, in float h)
     if(shadow < 0.0)
       shadow = 0.0;
 
-    float nnoise = (noise(rayPos.xy*2.3) +0.7)*0.03;
+    float nnoise = (noise(rayPos.xy*2.3) +0.7)*0.03*(0.7 + psin(12.0*cos(rayPos.y) + 14.0*rayPos.x + uTime/400.0) * 0.3);
     float fade = (0.1 + nnoise + shadow)*0.85 ;
 
     vec3 baseColorH = uGroundColor2; //vec3(0.9, 0.80, 0.65);
@@ -371,7 +371,9 @@ const float KUWA_S = 5.0;
 vec3 getSafeColAt(vec2 samplePos, vec4 baseC)
 {
    vec4 c = texture2D(u_image, samplePos);
-   if( abs(c.w-baseC.w) < 0.05 && c.w > 0.0 && c.w < 1.0)
+   float depthDiff = abs(c.w-baseC.w);
+   if(c.w > 0.0 && c.w < 1.0 &&
+      depthDiff < 0.1 && depthDiff < max(c.w, 0.03) && depthDiff < max(baseC.w, 0.03) )
     return c.xyz;
    return baseC.xyz; 
 }
