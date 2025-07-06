@@ -37,6 +37,8 @@ uniform vec3 uGroundColor2;
 uniform vec3 uCharColor;
 uniform vec3 uCharColor2;
 
+uniform vec4 floods[9];
+
 #define PI     3.14159265
 
 float psin(in float a)
@@ -218,6 +220,25 @@ vec4 orbDist(vec3 rayPos)
   return vec4(blendColor(uGroundColor/ 2.0, uCharColor2 , shadow), dis);
 }
 
+
+float getFloodHeight(vec2 rayPos, float h)
+{
+  float maxh = -1.0;
+  for(int i = 0; i < 9; i++)
+  {
+    vec4 flood = floods[i];
+    if(abs(flood.x - rayPos.x) > flood.z || abs(flood.y - rayPos.y) > flood.z ) continue;
+    float len = distance(rayPos, flood.xy);
+    if(len > flood.z) continue;
+    float frac = len/flood.z;
+    float fh = (1.0 - (frac * frac)) * flood.w;
+    if(fh > maxh) maxh = fh;
+  }
+  float alternate = h + (maxh * 0.1);
+  if(alternate > maxh) return alternate;
+  return maxh;
+}
+
 vec4 scatterDist(vec3 rayPos)
 {
   float scale = 3.0;
@@ -282,6 +303,20 @@ vec4 view(in vec2 uv, in vec2 pos2)
         return vec4(cloudDst.xyz, 1.0);
 
       float h = land(rayPos.xy);
+      float fh = getFloodHeight(rayPos.xy, h);
+      if(fh >= 0.0 && rayPos.z < fh+0.01)
+      {
+        float floodView = distance(rayPos, vec3(pos2, fh)) / 60.0;
+
+float nnn = noise(rayPos.xy*2.3) +0.7;
+float nnn2 = noise(rayPos.xy*3.1) +0.6;
+
+            float nnoise = smoothstep(nnn, nnn2, psin(uTime/500.0 + noise(rayPos.xy*1.4)*4.0))*0.03*(0.7 + psin(12.0*cos(rayPos.y) + 14.0*rayPos.x + uTime/200.0) * 0.3);
+        vec4 floodDst = vec4(0.0, 0.5+3.0*nnoise, 0.0, floodView);
+        return vec4(fog(floodDst.xyz, background, rayPos, shipPos), 0.0);
+      }
+
+
       if(rayPos.z < h+0.01)
       {
         vec4 groundColor = getGroundColor(rayPos, pos2, h);
@@ -292,6 +327,8 @@ vec4 view(in vec2 uv, in vec2 pos2)
       stpDist = min(sphereDst.w + 0.001, stpDist);
       stpDist = min(cloudDst.w + 0.001, stpDist);
       stpDist = min(orbDst.w + 0.001, stpDist);
+      if(fh > 0.0)
+        stpDist = min(abs(fh-rayPos.z)+0.001, stpDist);
       //stpDist = min(scatterDst.w + 0.001, stpDist);
 
       rayPos = rayPos+(stp * stpDist);
@@ -504,8 +541,10 @@ var speed = 0;
 var boosting = 0;
 function move(deltaTime)
 {
-
-  var dir = [Math.sin(shaderAngle), Math.cos(shaderAngle)];
+  var deflection = left ? Math.PI *0.5 : right ? -Math.PI *0.5 : 0;
+  deflection *= Math.sign(speed);
+  if(up || down) deflection *= 0.5;
+  var dir = [Math.sin(shaderAngle+deflection), Math.cos(shaderAngle+deflection)];
   
   var p2 = [0,0];
   p2[0] = shaderPos[0] + (dir[0]*0.001);
@@ -517,8 +556,6 @@ function move(deltaTime)
 
   speed += (up-down-diffH)*timefact;
   speed -= Math.sign(speed)* (Math.pow((1.0+Math.abs(speed)), 2.0)-1.0)*0.1*timefact;
-  
-
 
   var factor = speed * timefact;
 
@@ -529,7 +566,6 @@ function move(deltaTime)
 
 function physics(deltaTime)
 {
-  shaderAngle+=(left-right)*0.005*deltaTime; 
   move(deltaTime);
 }
 
@@ -561,6 +597,7 @@ function animateScene(time ) {
   setColorOption(baseShaderProgram, "uGroundColor2", uGroundColor2.value);
   setColorOption(baseShaderProgram, "uCharColor", uCharColor.value);
   setColorOption(baseShaderProgram, "uCharColor2", uCharColor2.value);
+  setArray4(baseShaderProgram, "floods",  [40.0,40.0,10.0,1.0,  -20.0,-10.0,12.0,2.0,  33.0,0.-7,5.0,0.1,     40.0,40.0,10.0,1.0,  -20.0,-10.0,12.0,2.0,  33.0,0.-7,5.0,0.1,       40.0,40.0,10.0,1.0,  -20.0,-10.0,12.0,2.0,  33.0,0.-7,5.0,0.1,]);
 
 
 
@@ -608,6 +645,12 @@ function setArray(prog, name, value)
 {
     var loc = gl.getUniformLocation(prog, name);
     gl.uniform1fv(loc, value);
+}
+
+function setArray4(prog, name, value)
+{
+    var loc = gl.getUniformLocation(prog, name);
+    gl.uniform4fv(loc, value);
 }
 
 function setColorOption(prog, name, value)
