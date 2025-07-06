@@ -1,844 +1,133 @@
 <html>
-	<head>
-		<meta http-equiv="refresh" content="10000" >
-		<meta charset="utf-8"/>
-
-
-
-<script id="vertex-shader" type="x-shader/x-vertex">
-attribute vec4 a_position;
-varying vec4 vPos;
-
-void main() {
-
-  // gl_Position is a special variable a vertex shader
-  // is responsible for setting
-  vPos = vec4(-a_position.x, a_position.yzw);
-  gl_Position = a_position;
-}
-</script>
-
-
-<script id="fragment-shader" type="x-shader/x-fragment">
-precision highp float;
-varying vec4 vPos;
-
-uniform vec2 uPos;
-uniform vec2 uResolution;
-uniform float uViewAngle;
-uniform float uViewAngleY;
-uniform float uSailAngle;
-uniform float uTime;
-
-uniform vec3 uSkyColor;
-uniform vec3 uSkyColor2;
-uniform vec3 uGroundColor;
-uniform vec3 uGroundColor2;
-uniform vec3 uCharColor;
-uniform vec3 uCharColor2;
-
-uniform vec4 floods[9];
-
-#define PI     3.14159265
-
-float psin(in float a)
-{
-    return (sin(a) / 2.0) + 0.5;
-}
-float pcos(in float a)
-{
-    return (cos(a) / 2.0) + 0.5;
-}
-
-
-float land(in vec2 uv)
-{
-    uv= uv /5.0;
-    float xy = uv.x+uv.y;
-    float val = psin(xy+3.0*psin(uv.x)+psin(uv.y)+psin(xy/10.0)*10.0);
-    return val;
-}
-
-vec3 raystep(in vec2 uv)
-{
-    uv= uv - 0.5;
-    vec3 look = vec3(
-      sin(uViewAngle) * cos(uViewAngleY),
-      cos(uViewAngle) * cos(uViewAngleY),
-      sin(uViewAngleY)
-    );
-
-    vec3 xNorm = vec3(
-      sin(uViewAngle + PI/2.0),
-      cos(uViewAngle + PI/2.0),
-      0.0
-    );
-    xNorm = xNorm / length(xNorm);
-
-    vec3 yNorm = vec3(
-      sin(uViewAngle) * cos(uViewAngleY+ PI/2.0),
-      cos(uViewAngle) * cos(uViewAngleY+ PI/2.0),
-      sin(uViewAngleY+ PI/2.0)
-    );
-    yNorm = yNorm / length(yNorm);
-
-    vec3 res = look + (xNorm*uv.x) + (yNorm*uv.y);
-    return res/length(res);
-}
-
-vec3 ray(in vec3 pos, in vec2 uv, in float dist)
-{
-    vec3 stp = raystep(uv);
-    return pos+(stp * dist);
-}
-
-float asPart(in float val)
-{
-    return val - floor(val);
-}
-
-float f(float x)
-{
-    if (x >= 0.0031308)
-        return (1.055) * pow(x, (1.0/2.4)) - 0.055;
-    else
-        return 12.92 * x;
-}
-vec3 f(vec3 x)
-{
-  return vec3(f(x.x), f(x.y), f(x.z));
-}
-float f_inv(float x)
-{
-    if (x >= 0.04045)
-        return pow(((x + 0.055)/(1.0 + 0.055)), 2.4);
-    else 
-        return x / 12.92;
-}
-vec3 f_inv(vec3 x)
-{
-  return vec3(f_inv(x.x), f_inv(x.y), f_inv(x.z));
-}
-vec3 blendColor(vec3 first, vec3 second, float param)
-{
-    if(param > 1.0)
-      return vec3(0.0, 1.0, 0.0);
-    if(param < 0.0)
-      return vec3(1.0, 0.0, 0.0);
-    first = f_inv(first);
-    second =  f_inv(second);
-    vec3 mixed = mix(first, second, param);
-    return f(mixed);
-}
-
-vec2 hash( vec2 p ) // replace this by something better
-{
-  p = vec2( dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3)) );
-  return -1.0 + 2.0*fract(sin(p)*43758.5453123);
-}
-
-float noise( in vec2 p )
-{
-    const float K1 = 0.366025404; // (sqrt(3)-1)/2;
-    const float K2 = 0.211324865; // (3-sqrt(3))/6;
-
-  vec2  i = floor( p + (p.x+p.y)*K1 );
-    vec2  a = p - i + (i.x+i.y)*K2;
-    float m = step(a.y,a.x); 
-    vec2  o = vec2(m,1.0-m);
-    vec2  b = a - o + K2;
-  vec2  c = a - 1.0 + 2.0*K2;
-    vec3  h = max( 0.5-vec3(dot(a,a), dot(b,b), dot(c,c) ), 0.0 );
-  vec3  n = h*h*h*h*vec3( dot(a,hash(i+0.0)), dot(b,hash(i+o)), dot(c,hash(i+1.0)));
-    return dot( n, vec3(70.0) );
-}
-
-vec4 getCloud(in vec3 rayPos, in vec3 stp, in vec3 sky, in vec3 shipPos)
-{
-    float dst = abs(20.0 - rayPos.z);
-    if(dst < 0.2)
-    {
-      float nn = (1.0 + noise(rayPos.xy / 25.0 + uTime/20000.0)) / 2.0;
-      if(nn < 0.5 + 0.05*sin((rayPos.x / 25.0)))
-        nn = 0.0;
-      float n = (nn) / 5.0;
-      vec3 col = blendColor(sky, vec3(0.7), n);
-      float viewD = abs(length(rayPos-shipPos));
-      col = blendColor(sky, col, 15.0 / viewD);
-      return vec4(col, dst);
-    }
-    return vec4(vec3(1.0), dst);
-}
-
-vec4 getGroundColor(in vec3 rayPos, in vec2 pos2, in float h)
-{
-    vec2 sundir = vec2(1.0);
-    float h2 = land(rayPos.xy+sundir*0.01);
-    float shadow = (h-h2) * 10.0 * 7.0 + h*0.1;
-    if(shadow < 0.0)
-      shadow = 0.0;
-
-    float nnoise = (noise(rayPos.xy*2.3) +0.7)*0.03*(0.7 + psin(12.0*cos(rayPos.y) + 14.0*rayPos.x + uTime/400.0) * 0.3);
-    float fade = (0.1 + nnoise + shadow)*0.85 ;
-
-    vec3 baseColorH = uGroundColor2; //vec3(0.9, 0.80, 0.65);
-    vec3 baseColorL = uGroundColor; //vec3(0.85, 0.80, 0.7);
-    vec3 baseColor = blendColor(baseColorL, baseColorH, h);
-    vec3 color = blendColor(baseColor/2.0, baseColor, fade);
-
-    float viewDist = distance(rayPos, vec3(pos2, h)) / 60.0;
-    if(viewDist > 1.0)
-       viewDist = 1.0;
-    return vec4(color, viewDist);
-}
-
-vec4 charDist(vec3 rayPos, vec3 pos, float rad)
-{
-    float h = pos.z-rad;
-    vec3 normal = normalize(rayPos-pos);
-    vec3 sundir = normalize(vec3(1.0, 1.0, 2.0));
-    float shadow = clamp(dot(sundir, normal)/ 2.0 + 0.3, 0.0, 1.0);
-    vec3 col = blendColor(uCharColor, uCharColor2, shadow);
-
-    float shipDis = length(pos - rayPos) - rad;
-    return vec4(col,  shipDis);
-}
-
-
-vec4 orbDist(vec3 rayPos)
-{
-  float scale = 100.0;
-  vec2 pos2 =  rayPos.xy / scale;
-  pos2 = vec2(floor(pos2.x)+0.5, floor(pos2.y)+0.5) * scale;
-  vec3 pos = vec3(pos2, land(pos2) );
-  float dis = length(pos - rayPos) - 5.0;
-
-  vec3 normal = normalize(rayPos-pos);
-  vec3 sundir = normalize(vec3(1.0, 1.0, 2.0));
-  float shadow = clamp(dot(sundir, normal)/ 2.0, 0.0, 1.0);
-
-  return vec4(blendColor(uGroundColor/ 2.0, uCharColor2 , shadow), dis);
-}
-
-
-float getFloodHeight(vec2 rayPos, float h)
-{
-  float maxh = -1.0;
-  for(int i = 0; i < 9; i++)
-  {
-    vec4 flood = floods[i];
-    if(abs(flood.x - rayPos.x) > flood.z || abs(flood.y - rayPos.y) > flood.z ) continue;
-    float len = distance(rayPos, flood.xy);
-    if(len > flood.z) continue;
-    float frac = len/flood.z;
-    float fh = (1.0 - (frac * frac)) * flood.w;
-    if(fh > maxh) maxh = fh;
-  }
-  float alternate = h + (maxh * 0.1);
-  if(alternate > maxh) return alternate;
-  return maxh;
-}
-
-vec4 scatterDist(vec3 rayPos)
-{
-  float scale = 3.0;
-  vec2 pos2 =  rayPos.xy / scale;
-  pos2 = vec2(floor(pos2.x)+0.5, floor(pos2.y)+0.5) * scale;
-  vec3 pos = vec3(pos2, land(pos2) + 0.2);
-  float dis = 3.0;
-  if(rayPos.z > pos.z)
-    dis = length(pos - rayPos) - 0.05;
-  else
-    dis = length(pos.xy - rayPos.xy) - 0.05;
-  return vec4(uGroundColor,  dis);
-}
-
-vec3 fog(vec3 col, vec3 background, vec3 rayPos, vec3 refP)
-{
-  float d = length(rayPos - refP) / 90.0; 
-  if(d > 1.0)
-    d = 1.0;
-  return blendColor(background, col, 1.0 - (d*d));
-}
-
-vec4 view(in vec2 uv, in vec2 pos2)
-{
-    vec3 stp = raystep(uv);
-    vec3 background = blendColor(uSkyColor, uSkyColor2, abs(stp.z)); 
-    vec4 skybox = vec4(background, 1.0);
-    float shipHeight = land(pos2);
-    vec3 camPos = vec3(pos2, shipHeight)- (raystep(vec2(0.5,0.5))*7.0);
-    if(camPos.z < land(camPos.xy)+0.5)
-      camPos.z = land(camPos.xy)+0.5;
-    vec3 rayPos = camPos+ (stp*0.5);
-
-    if(rayPos.z < land(rayPos.xy))
-      return vec4(1.0);
-
-    float sphereRad = 0.1;
-    vec3 shipPos = vec3(pos2, shipHeight+sphereRad);
-
-    for(float i = 0.0; i< 1000.0; i++)
-    {
-      vec4 sphereDst = charDist(rayPos, shipPos, sphereRad);
-      if(sphereDst.w < 0.0)
-      {
-      	return vec4(sphereDst.xyz, 0.0);
-      }
-
-      vec4 orbDst = orbDist(rayPos);
-      if(orbDst.w < 0.0)
-      {
-        return vec4(fog(orbDst.xyz, background, rayPos, shipPos), 0.0);
-      }
-
-      /*vec4 scatterDst = scatterDist(rayPos);
-      if(scatterDst.w < 0.0)
-      {
-        return vec4(fog(scatterDst.xyz, background, rayPos, shipPos), 0.0);
-      }*/
-
-      vec4 cloudDst = getCloud(rayPos, stp, skybox.xyz, shipPos);
-      if(cloudDst.w < 0.1)
-        return vec4(cloudDst.xyz, 1.0);
-
-      float h = land(rayPos.xy);
-      float fh = getFloodHeight(rayPos.xy, h);
-      if(fh >= 0.0 && rayPos.z < fh+0.01)
-      {
-        float floodView = distance(rayPos, vec3(pos2, fh)) / 60.0;
-
-float nnn = noise(rayPos.xy*2.3) +0.7;
-float nnn2 = noise(rayPos.xy*3.1) +0.6;
-
-            float nnoise = smoothstep(nnn, nnn2, psin(uTime/500.0 + noise(rayPos.xy*1.4)*4.0))*0.03*(0.7 + psin(12.0*cos(rayPos.y) + 14.0*rayPos.x + uTime/200.0) * 0.3);
-        vec4 floodDst = vec4(0.0, 0.5+3.0*nnoise, 0.0, floodView);
-        return vec4(fog(floodDst.xyz, background, rayPos, shipPos), 0.0);
-      }
-
-
-      if(rayPos.z < h+0.01)
-      {
-        vec4 groundColor = getGroundColor(rayPos, pos2, h);
-        return vec4(fog(groundColor.xyz, background, rayPos, shipPos), groundColor.w);
-      }
-
-      float stpDist = abs(h-rayPos.z)+0.001;
-      stpDist = min(sphereDst.w + 0.001, stpDist);
-      stpDist = min(cloudDst.w + 0.001, stpDist);
-      stpDist = min(orbDst.w + 0.001, stpDist);
-      if(fh > 0.0)
-        stpDist = min(abs(fh-rayPos.z)+0.001, stpDist);
-      //stpDist = min(scatterDst.w + 0.001, stpDist);
-
-      rayPos = rayPos+(stp * stpDist);
-    }
-    return skybox;
-}
-
-void main() 
-{
-  // gl_FragColor is a special variable a fragment shader
-  // is responsible for setting
-  vec2 uv = (vPos.xy +vec2(1.0))/2.0;
-  float aspect = uResolution.y / uResolution.x;
-
-  bool swtch = uResolution.y > uResolution.x;
-  if(swtch) aspect = uResolution.x / uResolution.y;
-
-  if(swtch) uv = vec2(uv.y, uv.x);
-  uv = vec2(uv.x, ((1.0-aspect)/2.0) + (uv.y * aspect));
-  if(swtch) uv = vec2(uv.y, uv.x);
-  
-  gl_FragColor = view(uv,uPos);
-}
-</script>
-
-
-<script id="postprocessing-shader" type="x-shader/x-fragment">
-precision highp float;
-varying vec4 vPos;
-uniform sampler2D u_image;
-uniform vec2 uRes;
-
-const int KERNELSIZE = 5;
-uniform float kernel1[KERNELSIZE*KERNELSIZE];
-uniform float kernel2[KERNELSIZE*KERNELSIZE];
-
-uniform bool postprocessing;
-
-#define PI     3.14159265
-float greyS(vec4 col)
-{
-  return col.a;
-}
-float f(float x)
-{
-    if (x >= 0.0031308)
-        return (1.055) * pow(x, (1.0/2.4)) - 0.055;
-    else
-        return 12.92 * x;
-}
-vec3 f(vec3 x)
-{
-  return vec3(f(x.x), f(x.y), f(x.z));
-}
-float f_inv(float x)
-{
-    if (x >= 0.04045)
-        return pow(((x + 0.055)/(1.0 + 0.055)), 2.4);
-    else 
-        return x / 12.92;
-}
-vec3 f_inv(vec3 x)
-{
-  return vec3(f_inv(x.x), f_inv(x.y), f_inv(x.z));
-}
-vec3 blendColor(vec3 first, vec3 second, float param)
-{
-    if(param > 1.0)
-      return vec3(0.0, 1.0, 0.0);
-    if(param < 0.0)
-      return vec3(1.0, 0.0, 0.0);
-    first = f_inv(first);
-    second =  f_inv(second);
-    vec3 mixed = mix(first, second, param);
-    return f(mixed);
-}
-
-vec2 conv(vec2 pos)
-{
-  float rad = float((KERNELSIZE-1) / 2);
-  vec2 dx = vec2(1.0 / uRes.x, 0.0);
-  vec2 dy = vec2(0.0, 1.0 / uRes.y);
-  
-  vec2 g = vec2(0.0);  
-  for(int x = 0; x < KERNELSIZE; x++)
-  for(int y = 0; y < KERNELSIZE; y++)
-  {
-    float i = float(x)-rad;
-    float j = float(y)-rad;
-    vec2 samplePos =  pos+i*dx+j*dy;
-    float val = greyS(texture2D(u_image, samplePos));
-    g.x = g.x + kernel1[x + KERNELSIZE * y] * val;
-    g.y = g.y + kernel2[x + KERNELSIZE * y] * val;
-  }
-  return g;
-}
-
-const float KUWA_S = 5.0;
-
-vec3 getSafeColAt(vec2 samplePos, vec4 baseC)
-{
-   vec4 c = texture2D(u_image, samplePos);
-   float depthDiff = abs(c.w-baseC.w);
-   if(c.w > 0.0 && c.w < 1.0 &&
-      depthDiff < 0.1 && depthDiff < max(c.w, 0.03) && depthDiff < max(baseC.w, 0.03) )
-    return c.xyz;
-   return baseC.xyz; 
-}
-
-vec4 kuwaharaQ(vec2 pos, vec2 step)
-{
-  vec4 baseC = texture2D(u_image, pos);
-  vec3 colSum = vec3(0.0);
-
-  for(float x = 1.0; x <= KUWA_S; x++)
-  for(float y = 1.0; y <= KUWA_S; y++)
-  {
-    vec2 samplePos = pos + vec2(step.x*x, step.y*y);
-    colSum += getSafeColAt(samplePos, baseC);
-  }
-  vec3 avgCol = colSum / (KUWA_S * KUWA_S);
-  float mean = (avgCol.x + avgCol.y + avgCol.z) / 3.0;
-
-  float sum = 0.0;
-  for(float x = 1.0; x <= KUWA_S; x++)
-  for(float y = 1.0; y <= KUWA_S; y++)
-  {
-    vec2 samplePos = pos + vec2(step.x*x, step.y*y);
-    vec3 val = getSafeColAt(samplePos, baseC);
-    float dev = ((val.x + val.y + val.z) / 3.0)-mean;
-    sum += dev*dev;
-  }
-
-  float vari = sum / (KUWA_S * KUWA_S);
-  return vec4(avgCol, vari);
-}
-
-void main() 
-{
-  vec2 pos = vec2(0.5)+ vec2(-0.5 * vPos.x, 0.5*vPos.y);
-  vec4 at = texture2D(u_image, pos);
-
-  if(!postprocessing)
-  {
-      gl_FragColor = vec4(at.rgb, 1.0);
-      return;
-  }
-
-  vec3 baseCol = at.rgb;
-
-  if(at.w > 0.0 && at.w < 1.0)
-  {
-    float sampleDist = 5.0;
-    vec2 step = vec2(sampleDist / uRes.x, sampleDist / uRes.y);
-    vec4 kuwa = kuwaharaQ(pos, step);
-    vec4 kuwa2 = kuwaharaQ(pos, step * vec2(1.0, -1.0));
-    if(kuwa2.w < kuwa.w)
-      kuwa = kuwa2;
-    kuwa2 = kuwaharaQ(pos, step * vec2(-1.0, 1.0));
-    if(kuwa2.w < kuwa.w)
-      kuwa = kuwa2;
-    kuwa2 = kuwaharaQ(pos, step * vec2(-1.0, -1.0));
-    if(kuwa2.w < kuwa.w)
-      kuwa = kuwa2;
-
-    baseCol = kuwa.rgb;
-  }
-  vec2 convs = conv(pos);
-  float diff = (convs.x-convs.y) * 108.0;
-  if(diff < 0.0) diff = 0.0;
-  if(diff > 0.7) diff = 1.0;
-  else if(diff < 0.15) diff = 0.0 ;
-
-  vec3 col = blendColor(baseCol, vec3(0.3), diff * (1.0-(at.a*at.a)));
-  gl_FragColor = vec4(col, 1.0);
-}
-
-
-
-</script>
-
-
-
-<script type="text/javascript">
-
-var left = 0;
-var right = 0;
-var up = 0;
-var down = 0;
-var push = 0;
-
-var shaderPos = [0,0];
-var shaderDeb = [0,0];
-var shaderAngle = Math.PI*1.25;
-var shaderAngleY = -Math.PI*0.25;
-var shaderSailAngle = Math.PI;
-
-function psin(a) { return (Math.sin(a)/2.0) + 0.5; }
-function pcos(a) { return (Math.cos(a)/2.0) + 0.5; }
-
-function land(p)
-{
-    var x = (p[0] / 5.0);
-    var y = (p[1] / 5.0);
-    var xy = x+y;
-    return psin(xy+3.0*psin(x)+psin(y)+psin(xy/10.0)*10.0);
-}
-
-var speed = 0;
-var boosting = 0;
-function move(deltaTime)
-{
-  var deflection = left ? Math.PI *0.5 : right ? -Math.PI *0.5 : 0;
-  deflection *= Math.sign(speed);
-  if(up || down) deflection *= 0.5;
-  var dir = [Math.sin(shaderAngle+deflection), Math.cos(shaderAngle+deflection)];
-  
-  var p2 = [0,0];
-  p2[0] = shaderPos[0] + (dir[0]*0.001);
-  p2[1] = shaderPos[1] + (dir[1]*0.001);
-  var diffH = (land(p2) - land(shaderPos))*1000;
-  var slopeAdjust = Math.sqrt(1 + (diffH*diffH));
-
-  var timefact = 0.005*deltaTime;
-
-  speed += (up-down-diffH)*timefact;
-  speed -= Math.sign(speed)* (Math.pow((1.0+Math.abs(speed)), 2.0)-1.0)*0.1*timefact;
-
-  var factor = speed * timefact;
-
-  factor = factor/slopeAdjust;
-  shaderPos[0]+=dir[0]* factor;
-  shaderPos[1]+=dir[1]* factor;
-}
-
-function physics(deltaTime)
-{
-  move(deltaTime);
-}
-
-var oldTime = null;
-function animateScene(time ) {
-  var deltaTime = 0;
-  if(oldTime != null)
-    deltaTime = time-oldTime;
-  if(deltaTime < 0)
-    deltaTime = 0;
-  if(deltaTime > 100)
-    deltaTime = 100;
-  physics(deltaTime);
-  oldTime = time;
-  gl.viewport(0, 0, glCanvas.width, glCanvas.height);
-  gl.useProgram(baseShaderProgram);
-
-
-  setVec2 (baseShaderProgram, "uPos", shaderPos);
-  setVec2 (baseShaderProgram, "uResolution", [glCanvas.width, glCanvas.height]);
-  setFloat(baseShaderProgram, "uTime", time);
-  setFloat(baseShaderProgram, "uViewAngle", shaderAngle);
-  setFloat(baseShaderProgram, "uViewAngleY", shaderAngleY);
-  setFloat(baseShaderProgram, "uSailAngle", shaderSailAngle);
-
-  setColorOption(baseShaderProgram, "uSkyColor", uSkyColor.value);
-  setColorOption(baseShaderProgram, "uSkyColor2", uSkyColor2.value);
-  setColorOption(baseShaderProgram, "uGroundColor", uGroundColor.value);
-  setColorOption(baseShaderProgram, "uGroundColor2", uGroundColor2.value);
-  setColorOption(baseShaderProgram, "uCharColor", uCharColor.value);
-  setColorOption(baseShaderProgram, "uCharColor2", uCharColor2.value);
-  setArray4(baseShaderProgram, "floods",  [40.0,40.0,10.0,1.0,  -20.0,-10.0,12.0,2.0,  33.0,0.-7,5.0,0.1,     40.0,40.0,10.0,1.0,  -20.0,-10.0,12.0,2.0,  33.0,0.-7,5.0,0.1,       40.0,40.0,10.0,1.0,  -20.0,-10.0,12.0,2.0,  33.0,0.-7,5.0,0.1,]);
-
-
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-
-  aVertexPosition = gl.getAttribLocation(baseShaderProgram, "a_position");
-
-  gl.enableVertexAttribArray(aVertexPosition);
-  gl.vertexAttribPointer(aVertexPosition, 2, gl.FLOAT, false, 0, 0);
-
-  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-  gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-
-  gl.useProgram(postProcessingshaderProgram);
-  
-  setVec2 (postProcessingshaderProgram, "uRes", [glCanvas.width, glCanvas.height]);
-  setFloat(postProcessingshaderProgram, "postprocessing",  postprocessing.checked);
-  setArray(postProcessingshaderProgram, "kernel1",  gKernel(2, 0.8));
-  setArray(postProcessingshaderProgram, "kernel2",  gKernel(2, 2.5));
-
-
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-  window.requestAnimationFrame(function(currentTime) {
-    animateScene(currentTime);
-  });
-}
-
-function setVec2(prog, name, value)
-{
-    var loc = gl.getUniformLocation(prog, name);
-    gl.uniform2fv(loc, value);
-}
-
-function setFloat(prog, name, value)
-{
-    var loc = gl.getUniformLocation(prog, name);
-    gl.uniform1f(loc, value);
-}
-
-function setArray(prog, name, value)
-{
-    var loc = gl.getUniformLocation(prog, name);
-    gl.uniform1fv(loc, value);
-}
-
-function setArray4(prog, name, value)
-{
-    var loc = gl.getUniformLocation(prog, name);
-    gl.uniform4fv(loc, value);
-}
-
-function setColorOption(prog, name, value)
-{
-    var r = Number("0x"+value.substring(0,2)) / 255.0;
-    var g = Number("0x"+value.substring(2,4)) / 255.0;
-    var b = Number("0x"+value.substring(4,6)) / 255.0;
-    var loc = gl.getUniformLocation(prog, name);
-    gl.uniform3fv(loc, [r,g,b]);
-}
-
-
-let gl = null;
-let glCanvas = null;
-
-// Vertex information
-let vertexArray;
-let vertexBuffer;
-let vertexNumComponents;
-let vertexCount;
-// Rendering data shared with the
-// scalers.
-// Animation timing
-window.addEventListener("load", startup, false);
-
-function startup() {
-  glCanvas = document.getElementById("glcanvas");
-  gl = glCanvas.getContext("webgl");
-  console.log("max num of attribts: "+gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
-
-  baseShaderProgram = buildShaderProgram([
-    { type: gl.VERTEX_SHADER, id: "vertex-shader" },
-    { type: gl.FRAGMENT_SHADER, id: "fragment-shader" }
-  ]);
-  postProcessingshaderProgram = buildShaderProgram([
-    { type: gl.VERTEX_SHADER, id: "vertex-shader" },
-    { type: gl.FRAGMENT_SHADER, id: "postprocessing-shader" }
-  ]);
-  aspectRatio = glCanvas.width/glCanvas.height;
-  vertexArray = new Float32Array([
-    -1, -1,  // first triangle
-     1, -1,
-    -1,  1,
-    -1,  1,  // second triangle
-     1, -1,
-     1,  1,
-  ]);
-  vertexBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, vertexArray, gl.STATIC_DRAW);
-  vertexNumComponents = 4;
-  vertexCount = vertexArray.length/vertexNumComponents;
-
-  //texture
-  // Create a texture.
-  texture = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
-                glCanvas.width, glCanvas.height, 0,
-                gl.RGBA, gl.UNSIGNED_BYTE, null);
-
-  // Set the parameters so we can render any size image.
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
-
-    // Create and bind the framebuffer
-    fb = gl.createFramebuffer();     
-
-
-  // end texture
-  
-  glCanvas.onpointerdown = (e) => {
-    glCanvas.onpointermove = mousemove;
-    glCanvas.setPointerCapture(e.pointerId);
-    glCanvas.requestPointerLock();
-  }
-
-
-  animateScene();
-}
-
-function mousemove(e) {
-  shaderAngle -= (e.movementX)/500;
-  shaderAngleY -= (e.movementY)/500;
-  if(-shaderAngleY < Math.PI*-0.5) shaderAngleY = Math.PI*0.5;
-  if(-shaderAngleY > Math.PI*0.5) shaderAngleY = -Math.PI*0.5;
-}
-
-function buildShaderProgram(shaderInfo) {
-  let program = gl.createProgram();
-
-  shaderInfo.forEach(function(desc) {
-    let shader = compileShader(desc.id, desc.type);
-
-    if (shader) {
-      gl.attachShader(program, shader);
-    }
-  });
-
-  gl.linkProgram(program)
-
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.log("Error linking shader program:");
-    console.log(gl.getProgramInfoLog(program));
-  }
-
-  return program;
-}
-
-function compileShader(id, type) {
-  let code = document.getElementById(id).firstChild.nodeValue;
-  let shader = gl.createShader(type);
-
-  gl.shaderSource(shader, code);
-  gl.compileShader(shader);
-
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    console.log(`Error compiling ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader:`);
-    console.log(gl.getShaderInfoLog(shader));
-  }
-  return shader;
-}
-
-function gKernel(n, s)
-{
-  var fac = 1.0/(2.0*s*s);
-  var kernel = [];
-  for(var i = -n; i <= n; i+=1.0)
-    for(var j = -n; j <= n; j+=1.0)
-      kernel.push(fac*Math.PI/Math.pow(Math.E, ((i*i+j*j)*fac)));
-  var normfac = 1 / kernel.reduce((a,b)=>a+b) ;
-  return kernel.map((x) => x * normfac);
-}
-
-document.addEventListener("keydown", event => {
-var pref = true;
-if(event.key == "a" || event.key == "ArrowLeft") //left;
-  left = 1;
-else if(event.key == "w" || event.key == "ArrowUp") //up;
-  up = 1;
-else if(event.key == "d" || event.key == "ArrowRight") //right;
-  right = 1;
-else if(event.key == "s" || event.key == "ArrowDown")  //down;
-  down = 1 ;
-else if(event.key == " ") //space;
-  push = 1 ;
-else
-  pref = false;
-if(pref)
-  event.preventDefault();
-});
-document.addEventListener("keyup", event => {
-var pref = true;
-if(event.key == "a" || event.key == "ArrowLeft") //left;
-  left = 0;
-else if(event.key == "w" || event.key == "ArrowUp") //up;
-  up = 0;
-else if(event.key == "d" || event.key == "ArrowRight") //right;
-  right = 0;
-else if(event.key == "s" || event.key == "ArrowDown")  //down;
-  down = 0 ;
-else if(event.key == " ") //space;
-  push = 0 ;
-  event.preventDefault();
-});
-
-</script>
-
-</HEAD>
-<body style="background-color:#333333; color: #999999">
-  <canvas id="glcanvas" width="1800" height="900">
-    Oh no! Your browser doesn't support canvas!
-  </canvas>
-  <br>
-  <input type=checkbox id="postprocessing" checked> postprocessing <br>
-  <input type=text id="uSkyColor" value="114444">  uSkyColor <br>
-  <input type=text id="uSkyColor2" value="448888">  uSkyColor2 <br>
-  <input type=text id="uGroundColor" value="ccbb99">  uGroundColor <br>
-  <input type=text id="uGroundColor2" value="eeddbb">  uGroundColor2 <br>
-  <input type=text id="uCharColor" value="444444">  uCharColor <br>
-  <input type=text id="uCharColor2" value="eeeeee">  uCharColor2 <br>
-
-
-
-
-</body>
+<head>
+	<title>sailing questions</title>
+	<script type="text/javascript">
+
+
+	var croatianMaps = 
+	{
+		"cv":"Knoten",
+		"M":"Nautische Meilen",
+		"V ka":"siehe Karte",
+		"V pl":"siehe Plan",
+		"B":"Weiß",
+		"Z":"Grün",
+		"C":"Rot",
+		"Pl":"Blau",
+		"Ž":"Gelb",
+		"Cr":"Schwarz",
+		"Na":"Orange",
+		"Lj":"Violett",
+		"Bl":"Blitz,Blink",
+		"Gr":"Fels",
+		"Hr":"Klippen",
+		"Bk":"Riff",
+		"Plic":"Untiefe",
+		"L":"Hafen",
+		"O":"Insel",
+		"U":"Bucht",
+		"k":"Steine",
+		"p":"Sand",
+		"m":"Schlamm",
+		"š":"Kies",
+		"Šk":"Muscheln",
+		"t":"Seegras",
+		"pm":"Sand+Schlamm",
+		"kor":"Korallen",
+		"Lt":"hell",
+		"Ho":"Leuchtturm",
+		"BN":"Funkfeuer",
+		"TR":"Funktturm",
+		"R":"Kreisförmig",
+		"Pot":"verdunkelt/gelöscht",
+		"BlGp":"Blitzgruppenfeuer",
+		"z":"Golf",
+	};
+
+	function randomKey(obj) {
+	    var keys = Object.keys(obj);
+	    return keys[ keys.length * Math.random() << 0];
+	};
+
+	function shuffleArray(array) {
+	    for (let i = array.length - 1; i > 0; i--) {
+	        const j = Math.floor(Math.random() * (i + 1));
+	        [array[i], array[j]] = [array[j], array[i]];
+	    }
+	}
+
+	function addRadio(div, text, value, onchecked)
+	{
+		var b = document.createElement("input");
+		b.type="radio";
+		b.name="answerRadios";
+		b.value = value;
+		b.id=value;
+		b.onclick = onchecked;
+		div.appendChild(b);
+
+		var l = document.createElement("label");
+		l.htmlFor =value;
+		l.innerHTML=text;
+		div.appendChild(l);
+		div.appendChild(document.createElement("br"));
+
+	}
+
+	function clear()
+	{
+		questionDiv.replaceChildren();
+		optionAnswer.replaceChildren();
+		textAnswer.value = "";
+	}
+
+	function askCroatianMap()
+	{
+		var q = randomKey(croatianMaps);
+		var answers = [croatianMaps[q]];
+		while(answers.length < 4)
+		{
+			var na = croatianMaps[randomKey(croatianMaps)];
+			if(!answers.includes(na))
+				answers.push(na);
+		}
+		shuffleArray(answers);
+
+		var onchecked= function(){
+			for (const child of optionAnswer.children) {
+				if(child.tagName != "LABEL")
+					continue;
+			  var correct = child.htmlFor == croatianMaps[q];
+			  console.log("clicked");
+			  child.style.backgroundColor = correct ? "#66ff66": "#ff6666";
+			}
+		};
+		for(var i=0; i<answers.length; i++ )
+			addRadio(optionAnswer, answers[i], answers[i], onchecked);
+		questionDiv.innerHTML = "Was bedeuted \""+q+"\" auf einer kroatischen Seekarte?";
+	}
+
+
+	function start()
+	{
+		askCroatianMap()
+	};
+
+	window.addEventListener("load", start);
+	</script>
+	<style>
+		input{
+			margin:10;
+		}
+		label
+		{
+			padding: 7;
+			width: 300px;
+		}
+	</style>
+</head>
+<div id="questionDiv" ></div>
+<div id="optionAnswer"></div>
+<br>
+<a href="">neue Frage</a>
 </html>
