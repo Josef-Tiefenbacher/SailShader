@@ -221,22 +221,25 @@ vec4 orbDist(vec3 rayPos)
 }
 
 
-float getFloodHeight(vec2 rayPos, float h)
+float getFloodHeight(vec2 rayPos, float h, in vec2 pos2)
 {
   float maxh = -1.0;
+  float shipdistance = distance(rayPos, pos2);
+  if(shipdistance > 1.0) shipdistance = 1.0;
   for(int i = 0; i < 9; i++)
   {
     vec4 flood = floods[i];
     if(abs(flood.x - rayPos.x) > flood.z || abs(flood.y - rayPos.y) > flood.z ) continue;
-    float len = distance(rayPos, flood.xy);
+    float len = distance(rayPos, flood.xy) + (noise(rayPos) * 0.2);
     if(len > flood.z) continue;
     float frac = len/flood.z;
     float fh = (1.0 - (frac * frac)) * flood.w;
     if(fh > maxh) maxh = fh;
   }
   float alternate = h + (maxh * 0.1);
-  if(alternate > maxh) return alternate;
-  return maxh;
+  if(alternate > maxh) 
+      return alternate;
+    return maxh;
 }
 
 vec4 scatterDist(vec3 rayPos)
@@ -303,15 +306,15 @@ vec4 view(in vec2 uv, in vec2 pos2)
         return vec4(cloudDst.xyz, 1.0);
 
       float h = land(rayPos.xy);
-      float fh = getFloodHeight(rayPos.xy, h);
+      float fh = getFloodHeight(rayPos.xy, h, pos2);
       if(fh >= 0.0 && rayPos.z < fh+0.01)
       {
         float floodView = distance(rayPos, vec3(pos2, fh)) / 60.0;
 
-float nnn = noise(rayPos.xy*2.3) +0.7;
-float nnn2 = noise(rayPos.xy*3.1) +0.6;
+        float nnn = noise(rayPos.xy*2.3) +0.7;
+        float nnn2 = noise(rayPos.xy*3.1) +0.6;
 
-            float nnoise = smoothstep(nnn, nnn2, psin(uTime/500.0 + noise(rayPos.xy*1.4)*4.0))*0.03*(0.7 + psin(12.0*cos(rayPos.y) + 14.0*rayPos.x + uTime/200.0) * 0.3);
+        float nnoise = smoothstep(nnn, nnn2, psin(uTime/500.0 + noise(rayPos.xy*1.4)*4.0))*0.03*(0.7 + psin(12.0*cos(rayPos.y) + 14.0*rayPos.x + uTime/200.0) * 0.3);
         vec4 floodDst = vec4(0.0, 0.5+3.0*nnoise, 0.0, floodView);
         return vec4(fog(floodDst.xyz, background, rayPos, shipPos), 0.0);
       }
@@ -327,7 +330,7 @@ float nnn2 = noise(rayPos.xy*3.1) +0.6;
       stpDist = min(sphereDst.w + 0.001, stpDist);
       stpDist = min(cloudDst.w + 0.001, stpDist);
       stpDist = min(orbDst.w + 0.001, stpDist);
-      if(fh > 0.0)
+      if(fh > h*0.9)
         stpDist = min(abs(fh-rayPos.z)+0.001, stpDist);
       //stpDist = min(scatterDst.w + 0.001, stpDist);
 
