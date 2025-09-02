@@ -268,7 +268,8 @@ vec3 fog(vec3 col, vec3 background, vec3 rayPos, vec3 refP)
 vec4 view(in vec2 uv, in vec2 pos2)
 {
     vec3 stp = raystep(uv);
-    vec3 background = blendColor(uSkyColor, uSkyColor2, abs(stp.z)); 
+    float skynoise = noise(stp.xy *100.0)/100.0;
+    vec3 background = blendColor(uSkyColor, uSkyColor2, abs(0.9*(stp.z-skynoise))); 
     vec4 skybox = vec4(background, 1.0);
     float shipHeight = land(pos2);
     vec3 camPos = vec3(pos2, shipHeight)- (raystep(vec2(0.5,0.5))*7.0);
@@ -316,7 +317,7 @@ vec4 view(in vec2 uv, in vec2 pos2)
         float nnn2 = noise(rayPos.xy*3.1) +0.6;
 
         float nnoise = smoothstep(nnn, nnn2, psin(uTime/500.0 + noise(rayPos.xy*1.4)*4.0))*0.03*(0.7 + psin(12.0*cos(rayPos.y) + 14.0*rayPos.x + uTime/200.0) * 0.3);
-        vec4 floodDst = vec4(0.0, 0.5+3.0*nnoise, 0.0, floodView);
+        vec4 floodDst = vec4(0.1, 0.3+3.0*nnoise, 0.1, floodView);
         return vec4(fog(floodDst.xyz, background, rayPos, shipPos), 0.0);
       }
 
@@ -601,7 +602,7 @@ function animateScene(time ) {
   setColorOption(baseShaderProgram, "uGroundColor2", uGroundColor2.value);
   setColorOption(baseShaderProgram, "uCharColor", uCharColor.value);
   setColorOption(baseShaderProgram, "uCharColor2", uCharColor2.value);
-  setArray4(baseShaderProgram, "floods",  [40.0,40.0,10.0,1.0,  -20.0,-10.0,12.0,2.0,  33.0,0.-7,5.0,0.1,     40.0,40.0,10.0,1.0,  -20.0,-10.0,12.0,2.0,  33.0,0.-7,5.0,0.1,       40.0,40.0,10.0,1.0,  -20.0,-10.0,12.0,2.0,  33.0,0.-7,5.0,0.1,]);
+  setArray4(baseShaderProgram, "floods",  [40.0,40.0,10.0,1.0,  -20.0,-10.0,12.0,2.0,  33.0,0.-7,5.0,0.1,     32.0,43.0,4.0,0.6,  -10.0,-7.0,4.0,1.0,  33.0,0.-7,5.0,0.1,       40.0,40.0,10.0,1.0,  -20.0,-10.0,12.0,2.0,  33.0,0.-7,5.0,0.1,]);
 
 
 
